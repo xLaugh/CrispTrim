@@ -1,0 +1,29 @@
+# Pousser un tag « vX.Y.Z » crée la release GitHub correspondante.
+# Les applis CrispTrim installées la voient et affichent « Nouvelle version disponible ».
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Vérifier que le tag correspond à la version du code
+        run: |
+          version=$(python3 -c "import re; print(re.search(r'__version__ = \"(.+?)\"', open('crisptrim/__init__.py', encoding='utf-8').read())[1])")
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::Le tag $GITHUB_REF_NAME ne correspond pas à __version__ = $version (crisptrim/__init__.py)"
+            exit 1
+          fi
+
+      - name: Créer la release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" --title "CrispTrim $GITHUB_REF_NAME" --generate-notes --verify-tag

@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CrispTrim</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <button id="brand" class="brand" title="À propos de CrispTrim"><span class="logo">✂</span><span>Crisp<b>Trim</b></span></button>
+    <button id="btn-add" class="btn primary">＋ Ajouter des rushes</button>
+    <form id="path-form" class="path-form">
+      <span class="path-icon">⌕</span>
+      <input id="path-input" type="text" placeholder="Coller le chemin d'un fichier…" spellcheck="false">
+    </form>
+    <label class="model" title="Modèle de transcription CrisperWhisper">
+      <span>Modèle</span>
+      <select id="model-select">
+        <option value="large">large · précis</option>
+        <option value="turbo">turbo · rapide</option>
+        <option value="medium">medium</option>
+        <option value="small">small</option>
+      </select>
+    </label>
+    <button id="update-pill" class="update-pill hidden" title="Voir la nouvelle version">
+      <i></i>Nouvelle version disponible <b id="update-pill-tag"></b>
+    </button>
+    <button id="btn-about" class="icon-btn" title="À propos et crédits">ⓘ</button>
+  </header>
+
+  <main class="layout">
+    <aside class="files">
+      <div class="panel-title">Rushes <span id="files-count" class="count"></span></div>
+      <ul id="file-list"></ul>
+      <div id="files-empty" class="files-empty">
+        <div class="files-empty-icon">⇣</div>
+        Glisse tes vidéos ici
+      </div>
+    </aside>
+
+    <section class="center">
+      <div id="empty" class="empty">
+        <div id="dropzone" class="dropzone">
+          <div class="drop-icon">✂</div>
+          <h1>Coupe tes silences et tes « euh »</h1>
+          <p class="muted">Glisse tes rushes ici, ou choisis-les. Tout est traité sur ta machine.</p>
+          <button id="btn-add-2" class="btn primary big">＋ Ajouter des rushes</button>
+          <div class="formats">MP4 · MOV · MKV · MXF · AVI · WAV · MP3 · M4A · FLAC</div>
+        </div>
+      </div>
+
+      <div id="editor" class="editor hidden">
+        <div class="player-wrap">
+          <video id="player" preload="auto"></video>
+          <div id="player-overlay" class="player-overlay hidden"></div>
+        </div>
+        <div class="transport">
+          <div class="transport-group">
+            <button id="btn-prev" class="icon-btn" title="Coupe précédente (←)">⏮</button>
+            <button id="btn-play" class="icon-btn play" title="Lecture / pause (Espace)">▶</button>
+            <button id="btn-next" class="icon-btn" title="Coupe suivante (→)">⏭</button>
+          </div>
+          <div class="timecodes">
+            <span class="tc"><small>Original</small><b id="time-orig">0:00.0</b></span>
+            <span class="tc edited"><small>Monté</small><b id="time-edit">0:00.0</b></span>
+          </div>
+          <label class="switch" title="Saute les parties coupées pendant la lecture (P)">
+            <input id="preview-toggle" type="checkbox" checked><span></span> Aperçu monté
+          </label>
+          <div class="spacer"></div>
+          <div class="legend">
+            <span><i class="sw keep"></i>Gardé</span>
+            <span><i class="sw silence"></i>Silence</span>
+            <span><i class="sw filler"></i>Hésitation</span>
+          </div>
+          <div class="zoom">
+            <button id="btn-zoom-out" class="icon-btn small" title="Dézoomer">−</button>
+            <button id="btn-zoom-fit" class="icon-btn small" title="Tout voir">⤢</button>
+            <button id="btn-zoom-in" class="icon-btn small" title="Zoomer">＋</button>
+          </div>
+        </div>
+        <div class="timeline-wrap">
+          <canvas id="timeline"></canvas>
+          <div id="tl-status" class="tl-status hidden"></div>
+        </div>
+        <p class="hint">
+          <span><kbd>Clic</kbd> se placer</span>
+          <span><kbd>Double-clic</kbd> garder / recouper</span>
+          <span><kbd>Ctrl</kbd> + molette : zoom</span>
+          <span><kbd>Espace</kbd> lecture</span>
+          <span><kbd>←</kbd><kbd>→</kbd> coupe suivante</span>
+        </p>
+      </div>
+    </section>
+
+    <aside class="side">
+      <nav class="tabs">
+        <button data-tab="settings" class="tab active">Réglages</button>
+        <button data-tab="cuts" class="tab">Coupes <span id="cuts-count" class="badge">0</span></button>
+        <button data-tab="text" class="tab">Texte</button>
+      </nav>
+
+      <div class="tab-body" data-body="settings">
+        <section class="card">
+          <label class="row switch"><input id="s-silences" type="checkbox" checked><span></span> Couper les silences</label>
+          <div class="field">
+            <div class="field-head"><span>Seuil de silence</span>
+              <label class="mini"><input id="s-auto" type="checkbox" checked> auto</label>
+              <output id="o-threshold"></output></div>
+            <input id="s-threshold" type="range" min="-70" max="-15" step="1" value="-45" disabled>
+          </div>
+          <div class="field">
+            <div class="field-head"><span>Silence minimum</span><output id="o-minsil"></output></div>
+            <input id="s-minsil" type="range" min="0.2" max="2" step="0.05" value="0.5">
+          </div>
+          <div class="field">
+            <div class="field-head"><span>Marge autour de la parole</span><output id="o-margin"></output></div>
+            <input id="s-margin" type="range" min="0" max="0.5" step="0.01" value="0.15">
+          </div>
+        </section>
+        <section class="card">
+          <label class="row switch"><input id="s-fillers" type="checkbox" checked><span></span> Couper les hésitations (« euh », « hum »)</label>
+          <label class="row switch"><input id="s-noises" type="checkbox" checked><span></span> Couper les bruits de bouche</label>
+          <p class="note">Détectés par CrisperWhisper, en local, sur ta carte graphique.</p>
+        </section>
+      </div>
+
+      <div class="tab-body hidden" data-body="cuts">
+        <div class="cuts-tools">
+          <button id="btn-all-on" class="btn ghost small">Tout couper</button>
+          <button id="btn-all-off" class="btn ghost small">Tout garder</button>
+          <select id="cuts-filter" class="small">
+            <option value="all">Toutes</option>
+            <option value="filler">Hésitations</option>
+            <option value="silence">Silences</option>
+          </select>
+        </div>
+        <ul id="cuts-list" class="cuts"></ul>
+      </div>
+
+      <div class="tab-body hidden" data-body="text">
+        <div id="transcript" class="transcript"></div>
+      </div>
+
+      <footer class="export">
+        <div class="stats">
+          <div class="stat"><small>Original</small><b id="st-orig">–</b></div>
+          <div class="stat"><small>Après coupe</small><b id="st-final">–</b></div>
+          <div class="stat gain-stat"><small>Gagné</small><b id="st-gain">–</b></div>
+        </div>
+        <div class="meter"><i id="st-bar"></i></div>
+
+        <div class="export-label">Timeline pour ton logiciel de montage</div>
+        <div class="nle-grid">
+          <button class="nle" data-export="fcpxml" title="DaVinci Resolve : Fichier > Importer > Timeline · Final Cut Pro : Fichier > Importer > XML">
+            <span class="nle-logo resolve">DR</span><span class="nle-name">DaVinci <br>Final Cut</span><small>.fcpxml</small>
+          </button>
+          <button class="nle" data-export="premiere" title="Premiere Pro : Fichier > Importer">
+            <span class="nle-logo premiere">Pr</span><span class="nle-name">Premiere <br>Pro</span><small>.xml</small>
+          </button>
+          <button class="nle" data-export="vegas" title="Vegas Pro : Fichier > Importer > Fichier texte EDL">
+            <span class="nle-logo vegas">V</span><span class="nle-name">Vegas <br>Pro</span><small>.txt</small>
+          </button>
+        </div>
+
+        <div class="export-label">Fichiers</div>
+        <button class="btn primary wide" data-export="mp4">Vidéo montée <small>.mp4</small></button>
+        <div class="export-row">
+          <button class="btn" data-export="srt">Sous-titres <small>.srt</small></button>
+          <button class="btn" data-export="txt">Texte <small>.txt</small></button>
+        </div>
+        <div id="export-status" class="export-status"></div>
+      </footer>
+    </aside>
+  </main>
+
+  <div id="drop-overlay" class="drop-overlay hidden">
+    <div class="drop-target">
+      <div class="drop-icon">⇣</div>
+      <div>Dépose tes rushes pour les analyser</div>
+    </div>
+  </div>
+  <div id="update-modal" class="modal-backdrop hidden">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="update-title">
+      <button class="modal-close" data-close title="Fermer">✕</button>
+      <div class="modal-head">
+        <span class="logo big">✂</span>
+        <div>
+          <h2 id="update-title">Nouvelle version disponible</h2>
+          <p class="muted"><b id="update-tag" class="accent"></b> · tu as la <span id="update-current"></span></p>
+        </div>
+      </div>
+      <pre id="update-notes" class="notes"></pre>
+      <p class="how">Pour mettre à jour, dans le dossier de CrispTrim :<br>
+        <code>git pull</code> puis <code>uv sync --extra asr</code></p>
+      <div class="modal-actions">
+        <button id="update-later" class="btn ghost">Plus tard</button>
+        <button id="update-open" class="btn primary">Voir sur GitHub</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="about-modal" class="modal-backdrop hidden">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="about-title">
+      <button class="modal-close" data-close title="Fermer">✕</button>
+      <div class="modal-head">
+        <span class="logo big">✂</span>
+        <div>
+          <h2 id="about-title">Crisp<b class="accent">Trim</b></h2>
+          <p class="muted">Version <span id="about-version"></span> · <span id="about-update" class="update-state"></span></p>
+        </div>
+      </div>
+      <p>Coupe automatiquement les silences et les « euh » de tes rushes, en local.</p>
+      <div class="about-links">
+        <div class="about-row"><span class="muted">Créé par</span>
+          <a data-href="https://github.com/xLaugh"><b>xLaugh</b></a></div>
+        <div class="about-row"><span class="muted">Code source</span>
+          <a data-href="https://github.com/xLaugh/CrispTrim">github.com/xLaugh/CrispTrim</a></div>
+        <div class="about-row"><span class="muted">Licence</span>
+          <a data-href="https://github.com/xLaugh/CrispTrim/blob/main/LICENSE">GNU GPL v3</a></div>
+      </div>
+      <h3>Crédits</h3>
+      <ul class="credits">
+        <li><a data-href="https://huggingface.co/nyrahealth">CrisperWhisper 2.0</a> par Nyra Health : transcription mot à mot.
+          Code sous MIT, <b>poids du modèle sous licence non commerciale</b>.</li>
+        <li><a data-href="https://github.com/openai/whisper">Whisper</a> par OpenAI (MIT)</li>
+        <li><a data-href="https://ffmpeg.org">FFmpeg</a> : décodage et rendu vidéo</li>
+        <li><a data-href="https://fastapi.tiangolo.com">FastAPI</a> et <a data-href="https://pywebview.flowrl.com">pywebview</a> : serveur et fenêtre</li>
+      </ul>
+      <div class="modal-actions">
+        <button id="about-check" class="btn ghost">Rechercher une mise à jour</button>
+        <button class="btn primary" data-href="https://github.com/xLaugh/CrispTrim">Ouvrir GitHub</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+  <script src="app.js"></script>
+</body>
+</html>

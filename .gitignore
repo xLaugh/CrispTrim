@@ -1,0 +1,14 @@
+.venv/
+__pycache__/
+.pytest_cache/
+.crisptrim-cache/
+*_crisptrim.*
+samples/
+
+# Données personnelles et locales (jamais envoyées)
+transcriptions/
+.claude/
+*.part.mp4
+*.proxy.mp4
+.DS_Store
+Thumbs.db

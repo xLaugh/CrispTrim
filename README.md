@@ -21,9 +21,23 @@ Tout tourne en local, sur ta carte graphique. La transcription mot à mot utilis
   | Vidéo montée | `.mp4` | NVENC si disponible |
   | Sous-titres / texte | `.srt` / `.txt` | recalés sur le montage, sans les hésitations |
 
-## Installation
+## Installation (Windows)
 
-Prérequis (Windows conseillé) :
+1. Télécharge **`CrispTrim-Setup.exe`** depuis la [dernière release](https://github.com/xLaugh/CrispTrim/releases/latest).
+2. Double-clique dessus. Si Windows affiche « Windows a protégé votre ordinateur », clique sur
+   *Informations complémentaires > Exécuter quand même* (le programme n'est pas signé).
+3. L'installateur récupère tout seul Python, PyTorch, FFmpeg et le modèle de transcription
+   (~6 Go à télécharger, 10 à 20 minutes), puis crée les raccourcis.
+
+Tout est installé dans `%LOCALAPPDATA%\CrispTrim`, sans droits administrateur. Les mises à jour se font en
+un clic depuis l'appli (« Nouvelle version disponible » > *Mettre à jour*) et ne téléchargent que le code.
+Pour désinstaller : *Paramètres > Applications > CrispTrim*.
+
+Une carte graphique NVIDIA est conseillée ; sans elle, la transcription tourne sur le processeur, plus lentement.
+
+## Installation depuis le code (développement)
+
+Prérequis :
 - [Git](https://git-scm.com/) et [uv](https://docs.astral.sh/uv/) ;
 - [FFmpeg](https://ffmpeg.org/) dans le PATH (`winget install ffmpeg`) ;
 - une carte graphique NVIDIA (conseillé ; marche aussi sur processeur, plus lentement).
@@ -57,7 +71,7 @@ pointent toujours vers le fichier original.
 
 Au démarrage, CrispTrim regarde s'il existe une version plus récente dans les
 [Releases](https://github.com/xLaugh/CrispTrim/releases). Si oui, « Nouvelle version disponible » s'affiche
-en haut à droite. Pour mettre à jour :
+en haut à droite. Avec l'installateur, le bouton *Mettre à jour* fait tout. Depuis le code :
 
 ```bash
 git pull
@@ -99,9 +113,12 @@ uv run --with pytest pytest
 | `cli.py` | ligne de commande |
 | `app/server.py` | serveur local (FastAPI) + fenêtre native (pywebview / WebView2) |
 | `app/static/` | interface : lecteur, timeline, coupes, transcription, export |
+| `installer/launcher.py` | `CrispTrim-Setup.exe` : installation, lancement, mise à jour, désinstallation |
+| `installer/build.py` | construit le `.exe` (PyInstaller) : `uv run --no-project --python 3.12 --with pyinstaller python installer/build.py` |
 
 **Publier une version** : change `__version__` dans `crisptrim/__init__.py`, commit, puis
-`git tag v0.2.0 && git push --tags`. L'action GitHub crée la release, et les applis installées la signalent.
+`git tag v0.2.0 && git push --tags`. L'action GitHub crée la release, y joint `CrispTrim-Setup.exe`,
+et les applis installées la signalent.
 
 ## Feuille de route
 

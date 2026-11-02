@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>CrispTrim</title>
+  <link rel="icon" href="crisptrim.ico">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -192,11 +193,14 @@
         </div>
       </div>
       <pre id="update-notes" class="notes"></pre>
-      <p class="how">Pour mettre à jour, dans le dossier de CrispTrim :<br>
+      <p id="update-how-git" class="how">Pour mettre à jour, dans le dossier de CrispTrim :<br>
         <code>git pull</code> puis <code>uv sync --extra asr</code></p>
+      <p id="update-how-installed" class="how hidden">Seul le code est téléchargé : CrispTrim se ferme,
+        se met à jour en quelques secondes et se relance tout seul. Termine tes exports avant.</p>
       <div class="modal-actions">
         <button id="update-later" class="btn ghost">Plus tard</button>
         <button id="update-open" class="btn primary">Voir sur GitHub</button>
+        <button id="update-install" class="btn primary hidden">Mettre à jour</button>
       </div>
     </div>
   </div>

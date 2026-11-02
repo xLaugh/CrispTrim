@@ -770,7 +770,28 @@ async function checkUpdate(force = false) {
   renderUpdate();
 }
 
-api("/api/version").then((v) => { $("#about-version").textContent = v.version; }).catch(() => {});
+// Version installée (CrispTrim-Setup.exe) : mise à jour en un clic. Version git : instructions.
+api("/api/version").then((v) => {
+  $("#about-version").textContent = v.version;
+  $("#update-install").classList.toggle("hidden", !v.installed);
+  $("#update-how-installed").classList.toggle("hidden", !v.installed);
+  $("#update-how-git").classList.toggle("hidden", v.installed);
+  $("#update-open").classList.toggle("primary", !v.installed);
+  $("#update-open").classList.toggle("ghost", v.installed);
+}).catch(() => {});
+$("#update-install").onclick = async () => {
+  const busy = jobs.some((j) => !["prêt", "erreur"].includes(j.stage)) || jobs.some((j) => j.export?.state === "rendu");
+  if (busy && !confirm("Une analyse ou un export est en cours et sera interrompu. Mettre à jour quand même ?")) return;
+  try {
+    $("#update-install").disabled = true;
+    $("#update-install").textContent = "Fermeture…";
+    await api("/api/update/install", { tag: update.latest });
+  } catch (e) {
+    $("#update-install").disabled = false;
+    $("#update-install").textContent = "Mettre à jour";
+    toast(e.message, true);
+  }
+};
 $("#brand").onclick = $("#btn-about").onclick = () => { renderUpdate(); openModal("#about-modal"); };
 $("#update-pill").onclick = () => openModal("#update-modal");
 $("#update-open").onclick = () => api("/api/open-url", { url: update.release.url }).catch((e) => toast(e.message, true));

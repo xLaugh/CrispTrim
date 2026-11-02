@@ -34,7 +34,9 @@ from ..transcribe import Transcriber, Word
 from ..updates import check as check_update
 
 STATIC = Path(__file__).parent / "static"
-DATA_DIR = Path(os.environ.get("LOCALAPPDATA", Path.home() / ".cache")) / "CrispTrim"
+# Version installée : CRISPTRIM_HOME est fourni par le lanceur (même dossier par défaut).
+DATA_DIR = Path(os.environ.get("CRISPTRIM_HOME") or Path(os.environ.get("LOCALAPPDATA", Path.home() / ".cache")) / "CrispTrim")
+LAUNCHER = os.environ.get("CRISPTRIM_LAUNCHER", "")
 CACHE_DIR = DATA_DIR / "cache"
 
 
@@ -370,12 +372,41 @@ def export_job(job_id: str, body: ExportBody):
 
 @app.get("/api/version")
 def version_info():
-    return {"version": __version__, "author": __author__, "repo_url": REPO_URL, "license": "GPL-3.0"}
+    return {"version": __version__, "author": __author__, "repo_url": REPO_URL, "license": "GPL-3.0",
+            "installed": bool(LAUNCHER) and Path(LAUNCHER).is_file()}
 
 
 @app.get("/api/update")
 def update_status(force: int = 0):
     return check_update(DATA_DIR / "update.json", force=bool(force))
+
+
+class InstallBody(BaseModel):
+    tag: str
+
+
+@app.post("/api/update/install")
+def install_update(body: InstallBody):
+    """Version installée : le lanceur télécharge la nouvelle version pendant que l'appli se ferme."""
+    if not (LAUNCHER and Path(LAUNCHER).is_file()):
+        raise HTTPException(409, "La mise à jour en un clic n'existe que dans la version installée.")
+    st = check_update(DATA_DIR / "update.json")
+    if not st["available"] or st["latest"] != body.tag:
+        raise HTTPException(400, "Cette version n'est pas disponible.")
+    # Nouveau lanceur indépendant : sans les variables internes de PyInstaller héritées du premier.
+    env = {k: v for k, v in os.environ.items() if not k.startswith("_PYI_") and k != "_MEIPASS2"}
+    env["PYINSTALLER_RESET_ENVIRONMENT"] = "1"
+    subprocess.Popen([LAUNCHER, "--update", body.tag, "--pid", str(os.getpid())], env=env,
+                     cwd=Path(LAUNCHER).parent, creationflags=0x00000008 | 0x00000200, close_fds=True)
+
+    def quit_app():
+        if WINDOW is not None:
+            WINDOW.destroy()
+        else:
+            os._exit(0)
+
+    threading.Timer(0.6, quit_app).start()
+    return {"ok": True}
 
 
 class UrlBody(BaseModel):
@@ -435,6 +466,10 @@ def main() -> None:
     ap.add_argument("--browser", action="store_true", help="ouvrir dans le navigateur au lieu d'une fenêtre")
     ap.add_argument("--no-browser", action="store_true", help="serveur seul (développement)")
     args = ap.parse_args()
+    if sys.stderr is not None:
+        import faulthandler
+
+        faulthandler.enable()  # en cas de plantage, la pile part dans le journal du lanceur
     require_ffmpeg()
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
     url = f"http://127.0.0.1:{args.port}"
@@ -463,15 +498,40 @@ def main() -> None:
                 break
         threading.Event().wait(0.1)
 
+    if sys.platform == "win32":
+        import ctypes
+
+        # Barre des tâches : CrispTrim a son propre groupe et son icône, pas celle de Python.
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("xLaugh.CrispTrim")
+
     global WINDOW
     WINDOW = webview.create_window(
         f"CrispTrim {__version__}", url, width=1440, height=900, min_size=(1000, 640), background_color="#0e1014",
     )
-    webview.start(bind_drop, WINDOW)
+    webview.start(on_start, WINDOW)
     server.should_exit = True
 
 
 MEDIA_SUFFIXES = {e.lstrip("*") for e in MEDIA_EXT.split(";")}
+
+
+def on_start(window) -> None:
+    bind_drop(window)
+    window.events.shown.wait(15)
+    set_icon(window)
+
+
+def set_icon(window) -> None:
+    """Icône CrispTrim sur la fenêtre (sinon Windows montre celle de Python)."""
+    ico = STATIC / "crisptrim.ico"
+    try:
+        from System import Action
+        from System.Drawing import Icon
+
+        form = window.native
+        form.Invoke(Action(lambda: setattr(form, "Icon", Icon(str(ico)))))
+    except Exception:  # noqa: BLE001 — simple détail visuel
+        traceback.print_exc()
 
 
 def bind_drop(window) -> None:

@@ -12,3 +12,8 @@ transcriptions/
 *.proxy.mp4
 .DS_Store
 Thumbs.db
+
+# Construction de l'installateur
+build/
+dist/
+installer/payload.zip

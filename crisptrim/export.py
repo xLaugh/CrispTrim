@@ -207,14 +207,18 @@ def write_vegas_edl(info: MediaInfo, frames: Frames, out: Path) -> None:
 # --------------------------------------------------------------------------- MP4 monté
 
 
+X264 = ["-c:v", "libx264", "-preset", "medium", "-crf", "18"]
+
+
 def _video_encoder() -> list[str]:
     try:
         enc = subprocess.run(["ffmpeg", "-hide_banner", "-encoders"], capture_output=True, text=True).stdout
     except OSError:
         enc = ""
+    # NVENC peut être compilé dans ffmpeg sans carte NVIDIA : render_mp4 se replie alors sur libx264.
     if "h264_nvenc" in enc:
         return ["-c:v", "h264_nvenc", "-preset", "p5", "-rc", "vbr", "-cq", "19", "-b:v", "0"]
-    return ["-c:v", "libx264", "-preset", "medium", "-crf", "18"]
+    return X264
 
 
 def _ffmpeg_major() -> int:
@@ -247,14 +251,21 @@ def render_mp4(info: MediaInfo, frames: Frames, out: Path) -> None:
         script = fh.name
     # ffmpeg ≥ 7 lit le graphe avec « -/filter_complex » ; « -filter_complex_script » a disparu en v8.
     script_opt = "-/filter_complex" if _ffmpeg_major() >= 7 else "-filter_complex_script"
-    cmd = ["ffmpeg", "-nostdin", "-y", "-v", "error", "-stats", "-i", str(info.path), script_opt, script]
-    if v:
-        cmd += ["-map", "[outv]", *_video_encoder(), "-pix_fmt", "yuv420p", "-r", f"{fps.numerator}/{fps.denominator}"]
-    if a:
-        cmd += ["-map", "[outa]", "-c:a", "aac", "-b:a", "192k"]
-    cmd += ["-movflags", "+faststart", str(out)]
+
+    def command(encoder: list[str]) -> list[str]:
+        cmd = ["ffmpeg", "-nostdin", "-y", "-v", "error", "-stats", "-i", str(info.path), script_opt, script]
+        if v:
+            cmd += ["-map", "[outv]", *encoder, "-pix_fmt", "yuv420p", "-r", f"{fps.numerator}/{fps.denominator}"]
+        if a:
+            cmd += ["-map", "[outa]", "-c:a", "aac", "-b:a", "192k"]
+        return cmd + ["-movflags", "+faststart", str(out)]
+
     try:
-        subprocess.run(cmd, check=True)
+        encoder = _video_encoder() if v else X264
+        if subprocess.run(command(encoder)).returncode != 0:
+            if encoder == X264:
+                raise RuntimeError("ffmpeg n'a pas pu rendre la vidéo montée.")
+            subprocess.run(command(X264), check=True)  # encodeur matériel indisponible
     finally:
         Path(script).unlink(missing_ok=True)
 

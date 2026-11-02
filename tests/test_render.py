@@ -42,3 +42,19 @@ def test_vegas_edl(tmp_path):
     v2 = rows[3]  # 2e segment, piste vidéo
     assert v2[1] == "1" and v2[10] == "VIDEO" and v2[2] == "2000.0000" and v2[13] == "4000.0000"
     assert rows[4][1] == "2" and rows[4][10] == "AUDIO" and "Vidéo été.mp4" in rows[4][11]
+
+
+def test_mp4_falls_back_without_gpu(tmp_path, monkeypatch):
+    """Encodeur matériel listé mais inutilisable (pas de carte NVIDIA) : repli sur libx264."""
+    from crisptrim import export
+
+    src = tmp_path / "s.mp4"
+    subprocess.run([
+        "ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "testsrc2=size=160x120:rate=25:duration=2",
+        "-f", "lavfi", "-i", "sine=f=440:d=2", "-c:v", "libx264", "-preset", "ultrafast", "-c:a", "aac",
+        "-shortest", str(src),
+    ], check=True)
+    monkeypatch.setattr(export, "_video_encoder", lambda: ["-c:v", "h264_absent_sans_gpu"])
+    out = tmp_path / "o.mp4"
+    export.render_mp4(probe(src), [(0, 25)], out)
+    assert abs(probe(out).duration - 1.0) < 0.1

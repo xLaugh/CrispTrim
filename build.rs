@@ -2,6 +2,15 @@
 // RT_MANIFEST 1) : logo CrispTrim en 9 tailles (16 à 256 px), informations de version et manifeste.
 fn main() {
     println!("cargo:rerun-if-changed=assets/crisptrim.ico");
+    // Version carte graphique : les bibliothèques NVIDIA ne sont chargées qu'au premier appel CUDA
+    // (chargement différé), après vérification qu'elles existent. Sans elles, le programme démarre
+    // quand même et transcrit sur le processeur.
+    if std::env::var_os("CARGO_FEATURE_CUDA").is_some() && std::env::var("CARGO_CFG_TARGET_ENV").as_deref() == Ok("msvc") {
+        for dll in ["nvcuda.dll", "cudart64_12.dll", "cublas64_12.dll", "cublasLt64_12.dll", "curand64_10.dll", "nvrtc64_120_0.dll"] {
+            println!("cargo:rustc-link-arg-bins=/DELAYLOAD:{dll}");
+        }
+        println!("cargo:rustc-link-arg-bins=delayimp.lib");
+    }
     #[cfg(windows)]
     {
         let version = std::env::var("CARGO_PKG_VERSION").unwrap_or_default();

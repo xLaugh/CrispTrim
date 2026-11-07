@@ -168,6 +168,7 @@ pub fn main(args: Vec<String>) -> i32 {
                             use crate::engine::transcribe::Phase;
                             match p {
                                 Phase::Download(a, b) => eprint!("\r  téléchargement du modèle : {} / {} Mo   ", a / 1_000_000, b / 1_000_000),
+                                Phase::DownloadGpu(a, b) => eprint!("\r  bibliothèques NVIDIA : {} / {} Mo   ", a / 1_000_000, b / 1_000_000),
                                 Phase::Loading => eprintln!("\n  chargement du modèle {model}…"),
                                 Phase::Transcribing(f) => {
                                     let pc = (f * 100.0) as i64;

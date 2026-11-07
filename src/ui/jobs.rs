@@ -285,6 +285,7 @@ pub fn ensure_words(job: &JobRef, config: &Arc<Mutex<Config>>, wake: &dyn Fn()) 
                     format!("Téléchargement du modèle… {} %  ({} / {} Mo)", a * 100 / b, a / 1_000_000, b / 1_000_000)
                 }
                 Phase::Download(a, _) => format!("Téléchargement du modèle… {} Mo", a / 1_000_000),
+                Phase::DownloadGpu(a, b) => format!("Téléchargement des bibliothèques NVIDIA (une fois)… {} / {} Mo", a / 1_000_000, b.max(1) / 1_000_000),
                 Phase::Loading => "Chargement du modèle…".to_string(),
                 Phase::Transcribing(f) => format!("Transcription… {} %", (f * 100.0).floor() as i64),
             })

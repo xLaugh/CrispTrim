@@ -3,6 +3,7 @@
 //! réglages par défaut (fenêtres de 30 s tous les 26 s, contexte des 12 derniers mots, réparation
 //! des boucles, relance si trop peu de mots, reprise des fins prématurées, Viterbi mot à mot).
 
+pub mod cuda;
 pub mod files;
 pub mod mel;
 pub mod model;
@@ -29,11 +30,28 @@ const MAX_REPAIRS: usize = 3;
 const FALLBACK_TEMPERATURES: [f64; 4] = [0.4, 0.6, 0.8, 1.0];
 const SAMPLES_PER_TEMP: usize = 3;
 
-/// Où tourne le modèle.
+/// Carte graphique NVIDIA utilisable par ce programme (compilé avec CUDA, pilote présent).
+pub fn gpu_available() -> bool {
+    cfg!(feature = "cuda") && cuda::has_driver()
+}
+
+/// Où tourne le modèle : carte graphique si ses bibliothèques sont prêtes, sinon processeur.
+/// Un échec de CUDA (bibliothèque absente, carte trop ancienne…) ne fait jamais planter : processeur.
 pub fn best_device() -> Device {
     #[cfg(feature = "cuda")]
-    if let Ok(d) = Device::new_cuda(0) {
-        return d;
+    {
+        static DEV: std::sync::OnceLock<Option<Device>> = std::sync::OnceLock::new();
+        if let Some(d) = DEV.get() {
+            return d.clone().unwrap_or(Device::Cpu);
+        }
+        if gpu_available() {
+            if let Some(dir) = cuda::find_libs(&crate::data_dir()) {
+                cuda::use_dir(&dir);
+                let d = std::panic::catch_unwind(|| Device::new_cuda(0).ok()).ok().flatten();
+                let _ = DEV.set(d.clone());
+                return d.unwrap_or(Device::Cpu);
+            }
+        }
     }
     Device::Cpu
 }

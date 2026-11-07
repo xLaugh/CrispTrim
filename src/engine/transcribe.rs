@@ -12,6 +12,8 @@ use super::whisper::{self, Transcriber};
 pub enum Phase {
     /// Téléchargement du modèle : octets reçus, total.
     Download(u64, u64),
+    /// Téléchargement des bibliothèques NVIDIA (une seule fois) : octets reçus, total.
+    DownloadGpu(u64, u64),
     Loading,
     /// Fraction du fichier transcrite (0..1).
     Transcribing(f64),
@@ -22,7 +24,7 @@ static LOADED: Mutex<Option<Transcriber>> = Mutex::new(None);
 
 /// Modèle par défaut : large sur carte graphique, turbo sur processeur (plus rapide).
 pub fn default_model() -> &'static str {
-    if whisper::uses_gpu(&whisper::best_device()) { "large" } else { "turbo" }
+    if whisper::gpu_available() { "large" } else { "turbo" }
 }
 
 /// Transcrit `audio` (16 kHz mono) et enregistre le résultat dans `cache_dir`
@@ -43,8 +45,22 @@ pub fn transcribe_file(
             Some(d) => d,
             None => whisper::files::download(model, data_dir, |a, b| phase(Phase::Download(a, b)))?,
         };
+        // Carte NVIDIA : bibliothèques CUDA téléchargées une fois si besoin (sinon processeur).
+        if whisper::gpu_available() && whisper::cuda::find_libs(data_dir).is_none() {
+            if let Err(e) = whisper::cuda::download(data_dir, |a, b| phase(Phase::DownloadGpu(a, b))) {
+                eprintln!("bibliothèques CUDA : {e} — transcription sur le processeur");
+            }
+        }
         phase(Phase::Loading);
-        *slot = Some(Transcriber::load(&dir, model, language, &whisper::best_device())?);
+        let device = whisper::best_device();
+        let loaded = match Transcriber::load(&dir, model, language, &device) {
+            Err(e) if whisper::uses_gpu(&device) => {
+                eprintln!("carte graphique : {e} — transcription sur le processeur");
+                Transcriber::load(&dir, model, language, &candle_core::Device::Cpu)?
+            }
+            r => r?,
+        };
+        *slot = Some(loaded);
     }
     let t = slot.as_mut().unwrap();
     phase(Phase::Transcribing(0.0));

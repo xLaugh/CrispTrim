@@ -148,7 +148,7 @@ fn settings_tab(app: &mut App, ui: &mut Ui) {
         ui.add_space(12.0);
         changed |= theme::switch(ui, &mut app.edit.cut_noises, "Couper les bruits de bouche", TEXT, font(13.5), w);
         ui.add_space(10.0);
-        let device = if crate::engine::whisper::uses_gpu(&crate::engine::whisper::best_device()) { "sur ta carte graphique" } else { "sur ton processeur" };
+        let device = if crate::engine::whisper::gpu_available() { "sur ta carte graphique" } else { "sur ton processeur" };
         ui.add(egui::Label::new(RichText::new(format!("Détectés par CrisperWhisper, en local {device}.")).size(11.5).color(FAINT)).wrap());
         if let Some(v) = &app.view {
             if v.stage == Stage::Transcription {

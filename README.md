@@ -14,7 +14,9 @@ L'ancienne version Python reste disponible sur la branche [`python-old`](https:/
 - **Silences** : détectés sur l'énergie du son, avec un seuil automatique réglable.
 - **Hésitations** : « euh », « heu », « hum », « mmh »… et bruits de bouche, repérés mot à mot par CrisperWhisper,
   transcrit directement en Rust ([candle](https://github.com/huggingface/candle)), avec l'avancement affiché.
-  Le modèle se télécharge au premier fichier (turbo 1,6 Go sur processeur, large 3,1 Go sur carte graphique) ;
+  Le modèle se télécharge au premier fichier (turbo 1,6 Go sur processeur, large 3,1 Go sur carte graphique).
+  Sur un PC NVIDIA (RTX 30 ou plus récent), CrispTrim télécharge aussi une fois son module carte graphique
+  (bibliothèques NVIDIA comprises, ~700 Mo) : environ 6 fois plus rapide que le temps réel ;
   les transcriptions déjà faites par la version Python sont reprises telles quelles.
 - **Aperçu monté** : la lecture saute les coupes. Chaque coupe s'écoute et se garde ou se recoupe d'un clic.
 - **Exports**, créés à côté du rush (identiques à ceux de la version Python) :
@@ -78,6 +80,7 @@ cargo run --release
 | `src/engine/cutter.rs` | segments gardés : parole + marges − hésitations, alignés sur les images |
 | `src/engine/export.rs` | FCPXML 1.9, XML Premiere (xmeml v4), EDL texte Vegas Pro, MP4, JSON |
 | `src/engine/text.rs` | texte et sous-titres recalés sur le montage |
+| `src/engine/gpu_worker.rs` | module carte graphique (`crisptrim-gpu.exe`, compilé avec `--features cuda`) |
 | `src/engine/updates.rs` | vérification des nouvelles versions (Releases GitHub) |
 | `src/cli.rs` | ligne de commande |
 | `src/ui/` | fenêtre : rushes, lecteur, timeline, coupes, transcription, export |
@@ -89,7 +92,6 @@ L'action GitHub crée la release et y joint `CrispTrim.exe`.
 
 ## Feuille de route
 
-- Transcription sur carte graphique NVIDIA (CUDA) dans le .exe publié
 - Installateur et mise à jour en un clic en Rust
 - Répétitions et faux départs (« je je je », phrases reprises)
 

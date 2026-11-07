@@ -48,3 +48,32 @@ jobs:
           notes=""
           if [ -f "docs/release-$GITHUB_REF_NAME.md" ]; then notes="--notes-file docs/release-$GITHUB_REF_NAME.md"; else notes="--generate-notes"; fi
           gh release create "$GITHUB_REF_NAME" dist/CrispTrim.exe --title "CrispTrim $GITHUB_REF_NAME" $notes --verify-tag
+
+  # Module carte graphique (crisptrim-gpu.exe) : le même programme compilé avec CUDA. CrispTrim.exe le
+  # télécharge depuis la release sur les PC NVIDIA. PTX pour sm_80 : RTX 30 et suivantes (compilé à la volée).
+  gpu-module:
+    needs: release
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: ilammy/msvc-dev-cmd@v1
+      - name: Installer CUDA 12.9 (compilateur et bibliothèques utiles seulement)
+        uses: Jimver/cuda-toolkit@v0.2.36
+        with:
+          cuda: "12.9.1"
+          method: network
+          sub-packages: '["nvcc", "cudart", "cublas", "cublas_dev", "curand", "curand_dev", "nvrtc", "nvrtc_dev"]'
+      - name: Construire crisptrim-gpu.exe
+        shell: bash
+        env:
+          CUDA_COMPUTE_CAP: "80"
+        run: |
+          cargo build --release --locked --features cuda
+          mkdir -p dist
+          cp target/release/crisptrim.exe dist/crisptrim-gpu.exe
+      - name: Joindre le module à la release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$GITHUB_REF_NAME" dist/crisptrim-gpu.exe --clobber

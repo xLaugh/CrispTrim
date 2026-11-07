@@ -42,6 +42,10 @@ fn attach_console() {}
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
+    // Module carte graphique lancé par CrispTrim.exe (voir engine::gpu_worker).
+    if args.first().map(String::as_str) == Some("--gpu-worker") {
+        std::process::exit(engine::gpu_worker::worker_main());
+    }
     let mut screenshot: Option<PathBuf> = None;
     let mut open: Vec<PathBuf> = Vec::new();
     let mut rest = Vec::new();

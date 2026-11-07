@@ -28,8 +28,41 @@ pub fn default_model() -> &'static str {
 }
 
 /// Transcrit `audio` (16 kHz mono) et enregistre le résultat dans `cache_dir`
-/// sous le même nom que la version Python.
+/// sous le même nom que la version Python. Sur un PC NVIDIA, la version processeur confie le
+/// travail au module carte graphique (`gpu_worker`) ; s'il échoue, elle transcrit elle-même.
 pub fn transcribe_file(
+    source: &Path,
+    audio: &[f32],
+    model: &str,
+    language: &str,
+    data_dir: &Path,
+    cache_dir: &Path,
+    mut phase: impl FnMut(Phase),
+) -> anyhow::Result<Vec<Word>> {
+    if !cfg!(feature = "cuda") && whisper::cuda::has_driver() && std::env::var_os("CRISPTRIM_NO_GPU").is_none() {
+        match super::gpu_worker::transcribe(source, model, language, data_dir, &mut phase) {
+            Ok(words) => {
+                save_cache(source, model, language, cache_dir, &words);
+                return Ok(words);
+            }
+            Err(e) => eprintln!("module carte graphique : {e} — transcription sur le processeur"),
+        }
+    }
+    transcribe_local(source, audio, model, language, data_dir, cache_dir, phase)
+}
+
+fn save_cache(source: &Path, model: &str, language: &str, cache_dir: &Path, words: &[Word]) {
+    if let Some(key) = cache_key(source, model, language) {
+        let _ = std::fs::create_dir_all(cache_dir);
+        let f = cache_dir.join(format!("{}.{key}.words.json", stem(source)));
+        if let Ok(s) = serde_json::to_string(words) {
+            let _ = std::fs::write(f, s);
+        }
+    }
+}
+
+/// Transcription dans ce programme (processeur, ou carte graphique si compilé avec CUDA).
+pub fn transcribe_local(
     source: &Path,
     audio: &[f32],
     model: &str,
@@ -46,7 +79,7 @@ pub fn transcribe_file(
             None => whisper::files::download(model, data_dir, |a, b| phase(Phase::Download(a, b)))?,
         };
         // Carte NVIDIA : bibliothèques CUDA téléchargées une fois si besoin (sinon processeur).
-        if whisper::gpu_available() && whisper::cuda::find_libs(data_dir).is_none() {
+        if cfg!(feature = "cuda") && whisper::gpu_available() && whisper::cuda::find_libs(data_dir).is_none() {
             if let Err(e) = whisper::cuda::download(data_dir, |a, b| phase(Phase::DownloadGpu(a, b))) {
                 eprintln!("bibliothèques CUDA : {e} — transcription sur le processeur");
             }
@@ -65,13 +98,7 @@ pub fn transcribe_file(
     let t = slot.as_mut().unwrap();
     phase(Phase::Transcribing(0.0));
     let words = t.transcribe(audio, &mut |f| phase(Phase::Transcribing(f)))?;
-    if let Some(key) = cache_key(source, model, language) {
-        let _ = std::fs::create_dir_all(cache_dir);
-        let f = cache_dir.join(format!("{}.{key}.words.json", stem(source)));
-        if let Ok(s) = serde_json::to_string(&words) {
-            let _ = std::fs::write(f, s);
-        }
-    }
+    save_cache(source, model, language, cache_dir, &words);
     Ok(words)
 }
 

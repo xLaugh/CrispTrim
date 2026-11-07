@@ -30,9 +30,10 @@ const MAX_REPAIRS: usize = 3;
 const FALLBACK_TEMPERATURES: [f64; 4] = [0.4, 0.6, 0.8, 1.0];
 const SAMPLES_PER_TEMP: usize = 3;
 
-/// Carte graphique NVIDIA utilisable par ce programme (compilé avec CUDA, pilote présent).
+/// Carte graphique NVIDIA présente : transcription sur la carte (directement si ce programme est
+/// compilé avec CUDA, sinon par le module carte graphique `gpu_worker`).
 pub fn gpu_available() -> bool {
-    cfg!(feature = "cuda") && cuda::has_driver()
+    cuda::has_driver() && std::env::var_os("CRISPTRIM_NO_GPU").is_none()
 }
 
 /// Où tourne le modèle : carte graphique si ses bibliothèques sont prêtes, sinon processeur.

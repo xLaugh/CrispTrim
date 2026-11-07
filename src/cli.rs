@@ -42,7 +42,7 @@ pub fn main(args: Vec<String>) -> i32 {
     let mut sil = SilenceParams::default();
     let mut cut = CutParams::default();
     let mut no_fillers = false;
-    let mut model = "large".to_string();
+    let mut model = crate::engine::transcribe::default_model().to_string();
     let mut language = "fr".to_string();
     let mut extra: HashSet<String> = HashSet::new();
 
@@ -159,7 +159,35 @@ pub fn main(args: Vec<String>) -> i32 {
                     println!("  transcription reprise : {}", f.display());
                     words = Some(w);
                 }
-                None => eprintln!("  pas de transcription CrisperWhisper pour ce fichier : silences seulement."),
+                None => {
+                    let t0 = std::time::Instant::now();
+                    let mut last = -1i64;
+                    let r = crate::engine::transcribe::transcribe_file(
+                        &info.path, &audio, &model, &language, &crate::data_dir(), &crate::data_dir().join("cache"),
+                        |p| {
+                            use crate::engine::transcribe::Phase;
+                            match p {
+                                Phase::Download(a, b) => eprint!("\r  téléchargement du modèle : {} / {} Mo   ", a / 1_000_000, b / 1_000_000),
+                                Phase::Loading => eprintln!("\n  chargement du modèle {model}…"),
+                                Phase::Transcribing(f) => {
+                                    let pc = (f * 100.0) as i64;
+                                    if pc != last {
+                                        last = pc;
+                                        eprint!("\r  transcription : {pc} %   ");
+                                    }
+                                }
+                            }
+                        },
+                    );
+                    eprintln!();
+                    match r {
+                        Ok(w) => {
+                            println!("  transcription faite en {:.0} s ({} mots)", t0.elapsed().as_secs_f64(), w.len());
+                            words = Some(w);
+                        }
+                        Err(e) => eprintln!("  transcription impossible : {e} — silences seulement."),
+                    }
+                }
             }
         }
 

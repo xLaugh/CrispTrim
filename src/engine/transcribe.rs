@@ -1,8 +1,63 @@
-//! Mots horodatés. V1 Rust : relit les transcriptions CrisperWhisper déjà faites (cache disque de
-//! CrispTrim, ou export JSON de la ligne de commande). Le modèle lui-même n'est pas encore porté.
+//! Mots horodatés : transcriptions déjà faites (cache disque, partagé avec la version Python),
+//! sinon transcription CrisperWhisper en Rust (`engine::whisper`).
 
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
+
+use super::whisper::{self, Transcriber};
+
+/// Étape en cours d'une transcription, pour l'affichage.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Phase {
+    /// Téléchargement du modèle : octets reçus, total.
+    Download(u64, u64),
+    Loading,
+    /// Fraction du fichier transcrite (0..1).
+    Transcribing(f64),
+}
+
+/// Modèle chargé une fois, gardé d'un fichier à l'autre.
+static LOADED: Mutex<Option<Transcriber>> = Mutex::new(None);
+
+/// Modèle par défaut : large sur carte graphique, turbo sur processeur (plus rapide).
+pub fn default_model() -> &'static str {
+    if whisper::uses_gpu(&whisper::best_device()) { "large" } else { "turbo" }
+}
+
+/// Transcrit `audio` (16 kHz mono) et enregistre le résultat dans `cache_dir`
+/// sous le même nom que la version Python.
+pub fn transcribe_file(
+    source: &Path,
+    audio: &[f32],
+    model: &str,
+    language: &str,
+    data_dir: &Path,
+    cache_dir: &Path,
+    mut phase: impl FnMut(Phase),
+) -> anyhow::Result<Vec<Word>> {
+    let mut slot = LOADED.lock().unwrap_or_else(|e| e.into_inner());
+    if slot.as_ref().map_or(true, |t| t.model_name != model) {
+        *slot = None;
+        let dir = match whisper::files::find(model, data_dir) {
+            Some(d) => d,
+            None => whisper::files::download(model, data_dir, |a, b| phase(Phase::Download(a, b)))?,
+        };
+        phase(Phase::Loading);
+        *slot = Some(Transcriber::load(&dir, model, language, &whisper::best_device())?);
+    }
+    let t = slot.as_mut().unwrap();
+    phase(Phase::Transcribing(0.0));
+    let words = t.transcribe(audio, &mut |f| phase(Phase::Transcribing(f)))?;
+    if let Some(key) = cache_key(source, model, language) {
+        let _ = std::fs::create_dir_all(cache_dir);
+        let f = cache_dir.join(format!("{}.{key}.words.json", stem(source)));
+        if let Ok(s) = serde_json::to_string(&words) {
+            let _ = std::fs::write(f, s);
+        }
+    }
+    Ok(words)
+}
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Word {

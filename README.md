@@ -12,9 +12,10 @@ L'ancienne version Python reste disponible sur la branche [`python-old`](https:/
 ## Ce que ça fait
 
 - **Silences** : détectés sur l'énergie du son, avec un seuil automatique réglable.
-- **Hésitations** : « euh », « heu », « hum », « mmh »… et bruits de bouche, repérés mot à mot par CrisperWhisper.
-  *Dans cette version Rust, les transcriptions déjà faites par la version Python sont reprises automatiquement ;
-  la transcription en Rust arrive dans une prochaine version.*
+- **Hésitations** : « euh », « heu », « hum », « mmh »… et bruits de bouche, repérés mot à mot par CrisperWhisper,
+  transcrit directement en Rust ([candle](https://github.com/huggingface/candle)), avec l'avancement affiché.
+  Le modèle se télécharge au premier fichier (turbo 1,6 Go sur processeur, large 3,1 Go sur carte graphique) ;
+  les transcriptions déjà faites par la version Python sont reprises telles quelles.
 - **Aperçu monté** : la lecture saute les coupes. Chaque coupe s'écoute et se garde ou se recoupe d'un clic.
 - **Exports**, créés à côté du rush (identiques à ceux de la version Python) :
 
@@ -71,7 +72,8 @@ cargo run --release
 |---|---|
 | `src/engine/media.rs` | ffprobe, décodage audio, vignettes |
 | `src/engine/silence.rs` | zones sonores par énergie, seuil automatique |
-| `src/engine/transcribe.rs` | reprise des transcriptions CrisperWhisper (cache) |
+| `src/engine/transcribe.rs` | transcriptions : cache, sinon CrisperWhisper en Rust |
+| `src/engine/whisper/` | CrisperWhisper 2.0 en Rust : spectrogramme, modèle (candle), Viterbi mot à mot, fenêtres de 30 s |
 | `src/engine/fillers.rs` | reconnaissance des hésitations françaises |
 | `src/engine/cutter.rs` | segments gardés : parole + marges − hésitations, alignés sur les images |
 | `src/engine/export.rs` | FCPXML 1.9, XML Premiere (xmeml v4), EDL texte Vegas Pro, MP4, JSON |
@@ -87,7 +89,7 @@ L'action GitHub crée la release et y joint `CrispTrim.exe`.
 
 ## Feuille de route
 
-- Transcription CrisperWhisper en Rust (sans Python)
+- Transcription sur carte graphique NVIDIA (CUDA) dans le .exe publié
 - Installateur et mise à jour en un clic en Rust
 - Répétitions et faux départs (« je je je », phrases reprises)
 

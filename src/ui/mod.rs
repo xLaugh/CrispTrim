@@ -55,9 +55,14 @@ pub struct View {
     pub export: ExportState,
     pub version: u64,
     pub playback: Option<Arc<Vec<i16>>>,
+    /// Étape affichée, avec l'avancement (« Transcription… 42 % »).
+    pub label: String,
+    pub words_error: String,
 }
 
 pub struct App {
+    /// Pour redessiner la fenêtre depuis un fil de travail.
+    repaint: egui::Context,
     config: Arc<Mutex<Config>>,
     queue: Queue,
     jobs: Vec<JobRef>,
@@ -108,7 +113,7 @@ impl App {
         let player = Player::new();
         let saved: serde_json::Value =
             std::fs::read_to_string(ui_state_file()).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default();
-        let model = saved["model"].as_str().filter(|m| MODELS.iter().any(|x| x.0 == *m)).unwrap_or("large").to_string();
+        let model = saved["model"].as_str().filter(|m| MODELS.iter().any(|x| x.0 == *m)).unwrap_or(crate::engine::transcribe::default_model()).to_string();
         let config = Arc::new(Mutex::new(Config {
             model: model.clone(),
             language: "fr".into(),
@@ -118,6 +123,7 @@ impl App {
         let ctx = cc.egui_ctx.clone();
         let queue = Queue::new(config.clone(), move || ctx.request_repaint());
         let mut app = App {
+            repaint: cc.egui_ctx.clone(),
             config,
             queue,
             jobs: Vec::new(),
@@ -262,6 +268,8 @@ impl App {
             export: j.export.clone(),
             version: j.version,
             playback: j.playback.clone(),
+            label: j.label(),
+            words_error: j.words_error.clone(),
         });
         let regions = j.regions.clone();
         drop(j);
@@ -302,8 +310,9 @@ impl App {
             drop(j);
             let config = self.config.clone();
             let job2 = job.clone();
+            let repaint = self.repaint.clone();
             std::thread::spawn(move || {
-                jobs::ensure_words(&job2, &config);
+                jobs::ensure_words(&job2, &config, &|| repaint.request_repaint());
                 let mut j = job2.lock().unwrap();
                 j.stage = Stage::Ready;
                 jobs::recut(&mut j);
@@ -601,7 +610,9 @@ impl eframe::App for App {
         // --screenshot : environ 120 images, puis on enregistre la fenêtre et on quitte.
         if let Some(path) = self.screenshot.clone() {
             ctx.request_repaint();
-            if self.frames >= 120 && !self.shot_requested {
+            // CRISPTRIM_SHOT_FRAMES : capture plus tardive (essais de la transcription).
+            let at = std::env::var("CRISPTRIM_SHOT_FRAMES").ok().and_then(|v| v.parse().ok()).unwrap_or(120);
+            if self.frames >= at && !self.shot_requested {
                 self.shot_requested = true;
                 ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(Default::default()));
             }

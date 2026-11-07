@@ -3,7 +3,7 @@
 use crate::engine::cutter::{compute_cuts, CutParams, Kind, Region, Stats};
 use crate::engine::media::{load_audio, load_playback_audio, probe, thumbnail, MediaInfo, SAMPLE_RATE};
 use crate::engine::silence::{detect_speech_db, frame_db, SilenceParams};
-use crate::engine::transcribe::{find_cached, Word};
+use crate::engine::transcribe::{find_cached, transcribe_file, Phase, Word};
 use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::mpsc::{channel, Sender};
@@ -79,11 +79,24 @@ pub struct Job {
     pub playback: Option<Arc<Vec<i16>>>,
     pub export: ExportState,
     pub version: u64,
+    /// Détail de l'étape en cours (téléchargement, pourcentage de transcription…).
+    pub status: String,
+    /// Échec de la transcription (les silences restent coupés).
+    pub words_error: String,
 }
 
 pub type JobRef = Arc<Mutex<Job>>;
 
 impl Job {
+    /// Texte de l'étape, avec l'avancement quand il est connu.
+    pub fn label(&self) -> String {
+        if self.stage == Stage::Transcription && !self.status.is_empty() {
+            self.status.clone()
+        } else {
+            self.stage.label().to_string()
+        }
+    }
+
     pub fn kind_is_audio(&self) -> bool {
         self.info.as_ref().map(|i| !i.has_video).unwrap_or(false)
     }
@@ -163,6 +176,8 @@ impl Queue {
             playback: None,
             export: ExportState::default(),
             version: 0,
+            status: String::new(),
+            words_error: String::new(),
         }));
         self.next_id += 1;
         let _ = self.tx.send(job.clone());
@@ -216,7 +231,7 @@ fn process(job: &JobRef, config: &Arc<Mutex<Config>>, wake: &dyn Fn()) -> Result
 
     let wants_words = job.lock().unwrap().settings.cut_fillers;
     if wants_words {
-        ensure_words(job, config);
+        ensure_words(job, config, wake);
     }
     let mut j = job.lock().unwrap();
     j.stage = Stage::Ready;
@@ -224,17 +239,21 @@ fn process(job: &JobRef, config: &Arc<Mutex<Config>>, wake: &dyn Fn()) -> Result
     Ok(())
 }
 
-/// Reprend une transcription CrisperWhisper déjà faite pour ce fichier, s'il y en a une.
-pub fn ensure_words(job: &JobRef, config: &Arc<Mutex<Config>>) {
+/// Mots du fichier : transcription déjà faite (cache), sinon transcription CrisperWhisper en Rust,
+/// avec l'avancement affiché (téléchargement du modèle, chargement, pourcentage).
+pub fn ensure_words(job: &JobRef, config: &Arc<Mutex<Config>>, wake: &dyn Fn()) {
     let path = {
         let mut j = job.lock().unwrap();
         if j.words.is_some() {
             return;
         }
         j.stage = Stage::Transcription;
+        j.status.clear();
+        j.words_error.clear();
         j.version += 1;
         j.info.as_ref().map(|i| i.path.clone()).unwrap_or_else(|| j.path.clone())
     };
+    wake();
     let (model, language, mut dirs) = {
         let c = config.lock().unwrap();
         (c.model.clone(), c.language.clone(), c.cache_dirs.clone())
@@ -242,11 +261,40 @@ pub fn ensure_words(job: &JobRef, config: &Arc<Mutex<Config>>) {
     if let Some(parent) = path.parent() {
         dirs.push(parent.join(".crisptrim-cache"));
     }
-    let found = find_cached(&path, &dirs, &model, &language);
-    let mut j = job.lock().unwrap();
-    if let Some((words, src)) = found {
+    if let Some((words, src)) = find_cached(&path, &dirs, &model, &language) {
+        let mut j = job.lock().unwrap();
         j.words = Some(words);
         j.words_source = Some(src);
+        j.version += 1;
+        return;
+    }
+    let set = |status: String| {
+        let mut j = job.lock().unwrap();
+        if j.status != status {
+            j.status = status;
+            j.version += 1;
+            drop(j);
+            wake();
+        }
+    };
+    let result = load_audio(&path, SAMPLE_RATE).map_err(anyhow::Error::msg).and_then(|audio| {
+        let cache = crate::data_dir().join("cache");
+        transcribe_file(&path, &audio, &model, &language, &crate::data_dir(), &cache, |p| {
+            set(match p {
+                Phase::Download(a, b) if b > 0 => {
+                    format!("Téléchargement du modèle… {} %  ({} / {} Mo)", a * 100 / b, a / 1_000_000, b / 1_000_000)
+                }
+                Phase::Download(a, _) => format!("Téléchargement du modèle… {} Mo", a / 1_000_000),
+                Phase::Loading => "Chargement du modèle…".to_string(),
+                Phase::Transcribing(f) => format!("Transcription… {} %", (f * 100.0).floor() as i64),
+            })
+        })
+    });
+    let mut j = job.lock().unwrap();
+    j.status.clear();
+    match result {
+        Ok(words) => j.words = Some(words),
+        Err(e) => j.words_error = e.to_string(),
     }
     j.version += 1;
 }

@@ -144,6 +144,7 @@ struct FileRow {
     name: String,
     path: String,
     stage: Stage,
+    label: String,
     duration: Option<f64>,
     gain: Option<f64>,
     audio: bool,
@@ -179,6 +180,7 @@ pub fn files_panel(app: &mut App, ctx: &egui::Context) {
                     name: j.name.clone(),
                     path: j.path.display().to_string(),
                     stage: j.stage,
+                    label: j.label(),
                     duration: j.info.as_ref().map(|i| i.duration),
                     gain: (!j.stage.busy() && j.stats.duration > 0.0).then_some(j.stats.removed_pct),
                     audio: j.kind_is_audio(),
@@ -261,8 +263,8 @@ fn file_row(app: &App, ui: &mut Ui, row: &FileRow, width: f32, wide: bool, selec
         };
         let my = r.top() + 39.0;
         p.circle_filled(Pos2::new(x + 3.5, my), 3.5, dot);
-        let stage = if busy || row.stage == Stage::Error { row.stage.label().to_string() } else { row.duration.map(|d| fmt(d, false)).unwrap_or_default() };
-        let stage = elide(ui, &stage, font(11.5), r.right() - x - 80.0);
+        let stage = if busy || row.stage == Stage::Error { row.label.clone() } else { row.duration.map(|d| fmt(d, false)).unwrap_or_default() };
+        let stage = elide(ui, &stage, font(11.5), r.right() - x - if busy { 24.0 } else { 80.0 });
         p.text(Pos2::new(x + 13.0, my), Align2::LEFT_CENTER, stage, font(11.5), MUTED);
         if let Some(g) = row.gain {
             let s = format!("−{} %", fmt_pct(g));
@@ -417,7 +419,7 @@ fn player_area(app: &mut App, ui: &mut Ui, r: Rect) {
     } else if !ready_media {
         overlay(p);
         spinner(p, r.center() - Vec2::new(0.0, 14.0), ui.input(|i| i.time));
-        p.text(r.center() + Vec2::new(0.0, 22.0), Align2::CENTER_CENTER, v.stage.label(), font(13.5), MUTED);
+        p.text(r.center() + Vec2::new(0.0, 22.0), Align2::CENTER_CENTER, v.label.as_str(), font(13.5), MUTED);
         ui.ctx().request_repaint();
     } else if v.info.as_ref().map(|i| !i.has_video).unwrap_or(false) {
         overlay(p);
@@ -517,7 +519,7 @@ fn timeline_area(app: &mut App, ui: &mut Ui, r: Rect) {
     app.tl.width = r.width();
     let (id, has_info, busy, label) = {
         let v = app.view.as_ref().unwrap();
-        (v.id, v.info.is_some(), v.stage.busy(), v.stage.label())
+        (v.id, v.info.is_some(), v.stage.busy(), v.label.clone())
     };
     if has_info {
         if app.tl.fitted != Some(id) {
@@ -569,7 +571,7 @@ fn timeline_area(app: &mut App, ui: &mut Ui, r: Rect) {
         p.rect(r, CornerRadius::same(12), PANEL, stroke(1.0, BORDER), StrokeKind::Inside);
     }
     if busy {
-        let w = theme::text_width(ui, label, font(12.0)) + 38.0;
+        let w = theme::text_width(ui, &label, font(12.0)) + 38.0;
         let sr = Rect::from_min_size(Pos2::new(r.right() - 10.0 - w, r.top() + 28.0), Vec2::new(w, 24.0));
         p.rect(sr, CornerRadius::same(12), rgba(17, 20, 27, 0.85), stroke(1.0, rgba(124, 108, 255, 0.4)), StrokeKind::Inside);
         p.circle_filled(Pos2::new(sr.left() + 14.0, sr.center().y), 4.0, ACCENT.gamma_multiply(pulse(ui)));

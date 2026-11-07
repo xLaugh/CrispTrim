@@ -148,11 +148,26 @@ fn settings_tab(app: &mut App, ui: &mut Ui) {
         ui.add_space(12.0);
         changed |= theme::switch(ui, &mut app.edit.cut_noises, "Couper les bruits de bouche", TEXT, font(13.5), w);
         ui.add_space(10.0);
-        ui.add(egui::Label::new(RichText::new("Détectés par CrisperWhisper. Cette version Rust reprend les transcriptions déjà faites sur ce PC.").size(11.5).color(FAINT)).wrap());
+        let device = if crate::engine::whisper::uses_gpu(&crate::engine::whisper::best_device()) { "sur ta carte graphique" } else { "sur ton processeur" };
+        ui.add(egui::Label::new(RichText::new(format!("Détectés par CrisperWhisper, en local {device}.")).size(11.5).color(FAINT)).wrap());
         if let Some(v) = &app.view {
-            if v.stage == Stage::Ready && app.edit.cut_fillers && !v.has_words {
+            if v.stage == Stage::Transcription {
+                ui.add_space(8.0);
+                ui.add(egui::Label::new(RichText::new(&v.label).size(12.0).color(ACCENT2)).wrap());
+                // pourcentage lu dans le libellé (« … 42 % »)
+                let pct = v.label.split('%').next().and_then(|s| s.split_whitespace().last()).and_then(|n| n.parse::<f32>().ok());
+                if let Some(p) = pct {
+                    ui.add_space(4.0);
+                    ui.add(egui::ProgressBar::new(p / 100.0).desired_height(5.0));
+                }
+            } else if v.stage == Stage::Ready && app.edit.cut_fillers && !v.has_words {
                 ui.add_space(6.0);
-                ui.add(egui::Label::new(RichText::new("Pas encore de transcription pour ce fichier : seuls les silences sont coupés.").size(11.5).color(FILLER)).wrap());
+                let msg = if v.words_error.is_empty() {
+                    "Pas de transcription pour ce fichier : seuls les silences sont coupés.".to_string()
+                } else {
+                    format!("Transcription impossible ({}) : seuls les silences sont coupés.", v.words_error)
+                };
+                ui.add(egui::Label::new(RichText::new(msg).size(11.5).color(FILLER)).wrap());
             }
         }
     });

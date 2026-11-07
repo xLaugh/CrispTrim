@@ -9,6 +9,7 @@ pub mod silence;
 pub mod text;
 pub mod transcribe;
 pub mod updates;
+pub mod whisper;
 
 mod textfile;
 pub use textfile::write_text;

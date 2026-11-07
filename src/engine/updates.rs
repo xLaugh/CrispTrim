@@ -35,6 +35,12 @@ pub fn parse_version(v: &str) -> Option<(u32, u32, u32)> {
     Some((c[1].parse().ok()?, c[2].parse().ok()?, c.get(3).map(|m| m.as_str().parse().unwrap_or(0)).unwrap_or(0)))
 }
 
+/// Tag de release accepté par le lanceur (`TAG_RE` du script `launcher` de CrispTrim.exe) :
+/// « v1.2 » ou « v1.2.3 », sans suffixe. Les autres tags ne sont pas proposés en mise à jour.
+pub fn is_release_tag(tag: &str) -> bool {
+    regex::Regex::new(r"^v\d+\.\d+(\.\d+)?$").map(|re| re.is_match(tag)).unwrap_or(false)
+}
+
 pub fn is_newer(latest: &str, current: &str) -> bool {
     matches!((parse_version(latest), parse_version(current)), (Some(a), Some(b)) if a > b)
 }
@@ -93,7 +99,7 @@ pub fn check(cache_file: &Path, force: bool) -> UpdateStatus {
     let latest = release.as_ref().map(|r| r.tag.clone());
     UpdateStatus {
         current: VERSION.to_string(),
-        available: latest.as_deref().map(|l| is_newer(l, VERSION)).unwrap_or(false),
+        available: latest.as_deref().map(|l| is_release_tag(l) && is_newer(l, VERSION)).unwrap_or(false),
         latest,
         release,
         error,
@@ -107,6 +113,7 @@ mod tests {
     #[test]
     fn versions() {
         assert_eq!(parse_version("v1.2"), Some((1, 2, 0)));
+        assert!(is_release_tag("v0.3.0") && is_release_tag("v1.2") && !is_release_tag("v0.3.0-beta") && !is_release_tag("0.3.0"));
         assert!(is_newer("v0.3.0", "0.2.0") && !is_newer("v0.2.0", "0.2.0") && !is_newer("x", "0.1"));
     }
 }

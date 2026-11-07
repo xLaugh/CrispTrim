@@ -36,6 +36,8 @@ dans `%LOCALAPPDATA%\CrispTrim\app`), et la décompilation de `CrispTrim.exe` ci
 | Pas de console | `CREATE_NO_WINDOW` (0x08000000) | `NO_WINDOW` | `media::tool` |
 | Port du serveur | 8765 | `PORT` | sans objet (plus de serveur web en Rust) |
 | Installation | uv 0.13.5, FFmpeg 9.0.2, Python 3.12, 12 Go libres | `UV_VERSION`, `FFMPEG_VERSION`, `NEED_FREE` | pas encore refait en Rust |
+| Tags de release | `^v\d+\.\d+(\.\d+)?$` ; un autre tag est refusé par `--update` | `TAG_RE`, `main` (ligne 917) | `updates::is_release_tag` + contrôle dans `release.yml` |
+| Mise à jour en un clic | télécharge `github.com/xLaugh/CrispTrim/archive/refs/tags/<tag>.zip`, exige `pyproject.toml` dans l'archive sinon « Archive du code invalide. », garde l'ancienne version en cas d'échec | `Job.put_code` (ligne 370), `Update.work` (ligne 792), ev_d2d3c75a… | la release Rust n'a pas de `pyproject.toml` : les installations Python refusent proprement la v0.2.0 et restent en 0.1.1 |
 | Couleurs du lanceur | fond #0b0d12, accent #7c6cff, ok #3ddc97, danger #ff5d6c | constantes `BG`, `ACCENT`, `OK`, `DANGER` | `theme.rs` (mêmes valeurs) |
 
 ## Silences — `silence.py`

@@ -17,6 +17,11 @@ jobs:
       - name: Vérifier que le tag correspond à la version du code
         shell: bash
         run: |
+          # Même règle que le lanceur (TAG_RE) : vX.Y ou vX.Y.Z, sans suffixe.
+          if ! [[ "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then
+            echo "::error::Tag $GITHUB_REF_NAME invalide : attendu vX.Y.Z"
+            exit 1
+          fi
           version=$(grep -m1 '^version' Cargo.toml | sed -E 's/version = "(.*)"/\1/')
           if [ "v$version" != "$GITHUB_REF_NAME" ]; then
             echo "::error::Le tag $GITHUB_REF_NAME ne correspond pas à version = $version (Cargo.toml)"

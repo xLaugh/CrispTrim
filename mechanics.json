@@ -331,6 +331,12 @@
    "group": "launcher",
    "value": false,
    "source": "function 0x140004c60 / 0x140004470: PyInstaller bootloader only; no matching strings (ev_c7e9b35c)"
+  },
+  {
+   "name": "release tag pattern",
+   "group": "updates",
+   "value": "^v\\d+\\.\\d+(\\.\\d+)?$",
+   "source": "launcher script TAG_RE / main (run by function 0x140004470)"
   }
  ]
 }

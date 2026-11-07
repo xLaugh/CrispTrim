@@ -46,6 +46,18 @@ fn main() {
     if args.first().map(String::as_str) == Some("--gpu-worker") {
         std::process::exit(engine::gpu_worker::worker_main());
     }
+    // Mise à jour sans fenêtre : crisptrim --update-to v0.3.1
+    if args.first().map(String::as_str) == Some("--update-to") {
+        attach_console();
+        let tag = args.get(1).cloned().unwrap_or_default();
+        match engine::updates::install_update(&tag, &mut |a, b| eprint!("\r  téléchargement : {} / {} Mo   ", a / 1_000_000, b / 1_000_000)) {
+            Ok(()) => std::process::exit(0),
+            Err(e) => {
+                eprintln!("\nmise à jour impossible : {e}");
+                std::process::exit(1);
+            }
+        }
+    }
     let mut screenshot: Option<PathBuf> = None;
     let mut open: Vec<PathBuf> = Vec::new();
     let mut rest = Vec::new();

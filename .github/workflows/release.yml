@@ -1,4 +1,5 @@
-# Pousser un tag « vX.Y.Z » crée la release GitHub et y joint CrispTrim.exe (version Rust).
+# Pousser un tag « vX.Y.Z » crée la release GitHub : CrispTrim-Setup.exe (installateur),
+# CrispTrim.exe (portable) et crisptrim-gpu.exe (module carte graphique, téléchargé par l'appli).
 name: Release
 
 on:
@@ -40,6 +41,14 @@ jobs:
           mkdir -p dist
           cp target/release/crisptrim.exe dist/CrispTrim.exe
 
+      - name: Construire CrispTrim-Setup.exe (installateur)
+        shell: bash
+        run: |
+          choco install innosetup -y --no-progress
+          version=$(grep -m1 '^version' Cargo.toml | sed -E 's/version = "(.*)"/\1/')
+          "/c/Program Files (x86)/Inno Setup 6/ISCC.exe" //Q "//DAppVersion=$version" installer/crisptrim.iss
+          ls -la dist
+
       - name: Créer la release
         shell: bash
         env:
@@ -47,13 +56,14 @@ jobs:
         run: |
           notes=""
           if [ -f "docs/release-$GITHUB_REF_NAME.md" ]; then notes="--notes-file docs/release-$GITHUB_REF_NAME.md"; else notes="--generate-notes"; fi
-          gh release create "$GITHUB_REF_NAME" dist/CrispTrim.exe --title "CrispTrim $GITHUB_REF_NAME" $notes --verify-tag
+          gh release create "$GITHUB_REF_NAME" dist/CrispTrim-Setup.exe dist/CrispTrim.exe --title "CrispTrim $GITHUB_REF_NAME" $notes --verify-tag
 
   # Module carte graphique (crisptrim-gpu.exe) : le même programme compilé avec CUDA. CrispTrim.exe le
   # télécharge depuis la release sur les PC NVIDIA. PTX pour sm_80 : RTX 30 et suivantes (compilé à la volée).
   gpu-module:
     needs: release
-    runs-on: windows-latest
+    # Visual Studio 2022 : compatible avec nvcc de CUDA 12.9 (windows-latest peut avoir une version plus récente).
+    runs-on: windows-2022
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -68,8 +78,17 @@ jobs:
         shell: bash
         env:
           CUDA_COMPUTE_CAP: "80"
+          NVCC_APPEND_FLAGS: "-allow-unsupported-compiler"
         run: |
-          cargo build --release --locked --features cuda
+          set +e
+          cargo build --release --locked --features cuda 2>&1 | tee build.log
+          code=${PIPESTATUS[0]}
+          set -e
+          if [ "$code" != 0 ]; then
+            # erreurs reprises en annotations (lisibles sur la page de l'action)
+            grep -iE "error|fatal|unsupported|cannot|not found" build.log | head -20 | while IFS= read -r l; do echo "::error::$l"; done
+            exit 1
+          fi
           mkdir -p dist
           cp target/release/crisptrim.exe dist/crisptrim-gpu.exe
       - name: Joindre le module à la release

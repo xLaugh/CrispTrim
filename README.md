@@ -31,10 +31,16 @@ L'ancienne version Python reste disponible sur la branche [`python-old`](https:/
 
 ## Installation (Windows)
 
-1. Télécharge **`CrispTrim.exe`** depuis la [dernière release](https://github.com/xLaugh/CrispTrim/releases/latest).
-2. Installe [FFmpeg](https://ffmpeg.org/) (`winget install ffmpeg`) si ce n'est pas déjà fait.
-   Si l'ancienne version de CrispTrim est installée, son FFmpeg est utilisé automatiquement.
-3. Lance `CrispTrim.exe`. Le programme n'est pas signé : *Informations complémentaires > Exécuter quand même*.
+Deux possibilités, depuis la [dernière release](https://github.com/xLaugh/CrispTrim/releases/latest) :
+
+- **`CrispTrim-Setup.exe`** (conseillé) : installe CrispTrim pour ton compte, sans droits administrateur, avec
+  raccourcis (menu Démarrer, Bureau) et désinstallation dans *Paramètres > Applications*.
+- **`CrispTrim.exe`** (portable) : un seul fichier, à lancer d'où tu veux, rien à installer.
+
+Les deux se mettent à jour en un clic (« Nouvelle version disponible » > *Mettre à jour*). Le programme n'est
+pas signé : au premier lancement, *Informations complémentaires > Exécuter quand même*.
+FFmpeg est nécessaire (`winget install ffmpeg`) ; si l'ancienne version de CrispTrim est installée, son FFmpeg
+est utilisé automatiquement.
 
 ## Utilisation
 

@@ -106,6 +106,80 @@ pub fn check(cache_file: &Path, force: bool) -> UpdateStatus {
     }
 }
 
+// ============================================================================ mise à jour en un clic
+
+/// Version installée par CrispTrim-Setup.exe (désinstalleur Inno Setup à côté du programme),
+/// sinon version portable (CrispTrim.exe lancé d'où on veut).
+pub fn is_installed() -> bool {
+    std::env::current_exe().ok().and_then(|e| e.parent().map(|d| d.join("unins000.exe").is_file())).unwrap_or(false)
+}
+
+fn download(url: &str, to: &Path, progress: &mut dyn FnMut(u64, u64)) -> Result<(), String> {
+    use std::io::{Read, Write};
+    let resp = ureq::get(url).set("User-Agent", &format!("CrispTrim/{VERSION}")).call().map_err(|e| e.to_string())?;
+    let total: u64 = resp.header("content-length").and_then(|s| s.parse().ok()).unwrap_or(0);
+    let mut rd = resp.into_reader();
+    let mut out = std::fs::File::create(to).map_err(|e| e.to_string())?;
+    let mut buf = vec![0u8; 1 << 18];
+    let mut done = 0u64;
+    loop {
+        let n = rd.read(&mut buf).map_err(|e| e.to_string())?;
+        if n == 0 {
+            break;
+        }
+        out.write_all(&buf[..n]).map_err(|e| e.to_string())?;
+        done += n as u64;
+        progress(done, total);
+    }
+    out.flush().map_err(|e| e.to_string())?;
+    if done < 1_000_000 {
+        return Err("fichier téléchargé incomplet".into());
+    }
+    Ok(())
+}
+
+/// Télécharge la version `tag` et lance son installation. Si `Ok`, l'appelant doit quitter :
+/// l'installateur (version installée) ou la nouvelle version (portable) prend le relais.
+pub fn install_update(tag: &str, progress: &mut dyn FnMut(u64, u64)) -> Result<(), String> {
+    if !is_release_tag(tag) {
+        return Err(format!("version inconnue : {tag}"));
+    }
+    let base = format!("{REPO_URL}/releases/download/{tag}");
+    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+    let mut cmd;
+    if is_installed() {
+        let setup = std::env::temp_dir().join(format!("CrispTrim-Setup-{tag}.exe"));
+        download(&format!("{base}/CrispTrim-Setup.exe"), &setup, progress)?;
+        cmd = std::process::Command::new(&setup);
+        cmd.args(["/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/CLOSEAPPLICATIONS"]);
+    } else {
+        // portable : nouvelle version à côté, échange des fichiers (un .exe lancé peut être renommé)
+        let dir = exe.parent().ok_or("dossier du programme introuvable")?;
+        let new = dir.join("CrispTrim.new.exe");
+        download(&format!("{base}/CrispTrim.exe"), &new, progress)?;
+        let old = dir.join("CrispTrim.old.exe");
+        let _ = std::fs::remove_file(&old);
+        std::fs::rename(&exe, &old).map_err(|e| format!("remplacement impossible : {e}"))?;
+        if let Err(e) = std::fs::rename(&new, &exe) {
+            let _ = std::fs::rename(&old, &exe);
+            return Err(format!("remplacement impossible : {e}"));
+        }
+        cmd = std::process::Command::new(&exe);
+    }
+    use std::process::Stdio;
+    cmd.stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
+    cmd.spawn().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Au démarrage : efface l'ancienne version laissée par une mise à jour portable.
+pub fn cleanup_after_update() {
+    if let Some(dir) = std::env::current_exe().ok().and_then(|e| e.parent().map(|d| d.to_path_buf())) {
+        let _ = std::fs::remove_file(dir.join("CrispTrim.old.exe"));
+        let _ = std::fs::remove_file(dir.join("CrispTrim.new.exe"));
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

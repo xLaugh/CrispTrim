@@ -740,7 +740,7 @@ fn update_modal(app: &mut App, ctx: &egui::Context) {
         app.modal = Modal::None;
         return;
     };
-    let (mut later, mut open) = (false, false);
+    let (mut later, mut open, mut install) = (false, false, false);
     let close = modal_frame(ctx, "update", |ui| {
         modal_head(ui, |ui| {
             ui.label(RichText::new("Nouvelle version disponible").size(19.0).family(theme::bold()));
@@ -761,17 +761,59 @@ fn update_modal(app: &mut App, ctx: &egui::Context) {
             });
         }
         ui.add_space(12.0);
-        let how = "Télécharge la nouvelle version sur GitHub et remplace l'ancienne : les réglages et le cache des transcriptions sont gardés.";
-        ui.add(egui::Label::new(RichText::new(how).size(12.0).color(MUTED)).wrap());
+        let dl = app.update_dl.as_ref().map(|d| d.lock().unwrap().clone());
+        let how = match &dl {
+            Some((_, _, Some(e), _)) => format!("La mise à jour a échoué : {e}"),
+            Some((a, b, None, _)) if *b > 0 => format!("Téléchargement… {} %  ({} / {} Mo)", a * 100 / b, a / 1_000_000, b / 1_000_000),
+            Some(_) => "Téléchargement…".to_string(),
+            None if crate::engine::updates::is_installed() => {
+                "CrispTrim télécharge la nouvelle version, se ferme et se relance tout seul. Les réglages, les modèles et le cache sont gardés.".to_string()
+            }
+            None => "La nouvelle version remplace ce fichier CrispTrim.exe, puis se relance. Les réglages, les modèles et le cache sont gardés.".to_string(),
+        };
+        let failed = matches!(&dl, Some((_, _, Some(_), _)));
+        ui.add(egui::Label::new(RichText::new(how).size(12.0).color(if failed { FILLER } else { MUTED })).wrap());
+        if let Some((a, b, None, _)) = &dl {
+            ui.add_space(6.0);
+            ui.add(egui::ProgressBar::new(if *b > 0 { *a as f32 / *b as f32 } else { 0.0 }).desired_height(5.0));
+            ctx.request_repaint_after(std::time::Duration::from_millis(100));
+        }
         ui.add_space(20.0);
+        let busy = matches!(&dl, Some((_, _, None, _)));
         ui.with_layout(Layout::right_to_left(Align::Min), |ui| {
             ui.spacing_mut().item_spacing.x = 8.0;
-            let w = theme::text_width(ui, "Voir sur GitHub", bfont(13.5)) + 28.0;
-            open = theme::button(ui, Vec2::new(w, 34.0), Btn::Primary, "Voir sur GitHub", "", true, font(13.5)).clicked();
+            let w = theme::text_width(ui, "Mettre à jour", bfont(13.5)) + 28.0;
+            install = theme::button(ui, Vec2::new(w, 34.0), Btn::Primary, "Mettre à jour", "", !busy, font(13.5)).clicked();
+            let w = theme::text_width(ui, "Voir sur GitHub", font(13.5)) + 28.0;
+            open = theme::button(ui, Vec2::new(w, 34.0), Btn::Ghost, "Voir sur GitHub", "", true, font(13.5)).clicked();
             let w = theme::text_width(ui, "Plus tard", font(13.5)) + 28.0;
-            later = theme::button(ui, Vec2::new(w, 34.0), Btn::Ghost, "Plus tard", "", true, font(13.5)).clicked();
+            later = theme::button(ui, Vec2::new(w, 34.0), Btn::Ghost, "Plus tard", "", !busy, font(13.5)).clicked();
         });
     });
+    // téléchargement terminé : l'installateur ou la nouvelle version prend le relais
+    if app.update_dl.as_ref().is_some_and(|d| d.lock().unwrap().3) {
+        std::process::exit(0);
+    }
+    if install {
+        if let Some(tag) = u.latest.clone() {
+            let state = std::sync::Arc::new(std::sync::Mutex::new((0u64, 0u64, None::<String>, false)));
+            app.update_dl = Some(state.clone());
+            let repaint = ctx.clone();
+            std::thread::spawn(move || {
+                let r = crate::engine::updates::install_update(&tag, &mut |a, b| {
+                    let mut s = state.lock().unwrap();
+                    s.0 = a;
+                    s.1 = b;
+                });
+                let mut s = state.lock().unwrap();
+                match r {
+                    Ok(()) => s.3 = true,
+                    Err(e) => s.2 = Some(e),
+                }
+                repaint.request_repaint();
+            });
+        }
+    }
     if open {
         let url = u.release.as_ref().map(|r| r.url.clone()).unwrap_or_else(|| format!("{REPO_URL}/releases"));
         super::open_url(&url);

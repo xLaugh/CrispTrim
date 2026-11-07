@@ -93,6 +93,8 @@ pub struct App {
     toast: Option<(String, bool, Instant)>,
     update: Option<UpdateStatus>,
     update_rx: Option<Receiver<UpdateStatus>>,
+    /// Mise à jour en cours de téléchargement : (reçu, total, erreur, terminé).
+    pub update_dl: Option<Arc<Mutex<(u64, u64, Option<String>, bool)>>>,
     check_toast: bool,
     modal: Modal,
     skip_version: Option<String>,
@@ -153,6 +155,7 @@ impl App {
             toast: None,
             update: None,
             update_rx: None,
+            update_dl: None,
             check_toast: false,
             modal: Modal::None,
             skip_version: saved["skip_version"].as_str().map(String::from),
@@ -638,6 +641,7 @@ impl eframe::App for App {
 }
 
 pub fn run(screenshot: Option<PathBuf>, open: Vec<PathBuf>) -> Result<(), String> {
+    crate::engine::updates::cleanup_after_update();
     // Logo CrispTrim (installer/crisptrim.png du dépôt) : fenêtre et barre des tâches.
     let icon = {
         let img = image::load_from_memory(include_bytes!("../../assets/crisptrim.png")).map(|i| i.into_rgba8());

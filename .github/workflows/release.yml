@@ -1,5 +1,4 @@
-# Pousser un tag « vX.Y.Z » crée la release GitHub et y joint CrispTrim-Setup.exe.
-# Les applis CrispTrim installées la voient et affichent « Nouvelle version disponible ».
+# Pousser un tag « vX.Y.Z » crée la release GitHub et y joint CrispTrim.exe (version Rust).
 name: Release
 
 on:
@@ -11,34 +10,36 @@ permissions:
 
 jobs:
   release:
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
 
       - name: Vérifier que le tag correspond à la version du code
+        shell: bash
         run: |
-          version=$(python3 -c "import re; print(re.search(r'__version__ = \"(.+?)\"', open('crisptrim/__init__.py', encoding='utf-8').read())[1])")
+          version=$(grep -m1 '^version' Cargo.toml | sed -E 's/version = "(.*)"/\1/')
           if [ "v$version" != "$GITHUB_REF_NAME" ]; then
-            echo "::error::Le tag $GITHUB_REF_NAME ne correspond pas à __version__ = $version (crisptrim/__init__.py)"
+            echo "::error::Le tag $GITHUB_REF_NAME ne correspond pas à version = $version (Cargo.toml)"
             exit 1
           fi
 
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Tests
+        run: cargo test --locked
+
+      - name: Construire CrispTrim.exe
+        shell: bash
+        run: |
+          cargo build --release --locked
+          mkdir -p dist
+          cp target/release/crisptrim.exe dist/CrispTrim.exe
+
       - name: Créer la release
+        shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" --title "CrispTrim $GITHUB_REF_NAME" --generate-notes --verify-tag
-
-  setup-exe:
-    needs: release
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
-
-      - name: Construire CrispTrim-Setup.exe
-        run: uv run --no-project --python 3.12 --with pyinstaller python installer/build.py
-
-      - name: Joindre le .exe à la release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh release upload "${{ github.ref_name }}" dist/CrispTrim-Setup.exe --clobber
+        run: |
+          notes=""
+          if [ -f "docs/release-$GITHUB_REF_NAME.md" ]; then notes="--notes-file docs/release-$GITHUB_REF_NAME.md"; else notes="--generate-notes"; fi
+          gh release create "$GITHUB_REF_NAME" dist/CrispTrim.exe --title "CrispTrim $GITHUB_REF_NAME" $notes --verify-tag

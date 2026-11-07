@@ -1,0 +1,336 @@
+{
+ "version": 1,
+ "values": [
+  {
+   "name": "analysis sample rate",
+   "group": "silence",
+   "value": 16000,
+   "unit": "Hz",
+   "source": "crisptrim/media.py SAMPLE_RATE"
+  },
+  {
+   "name": "energy frame",
+   "group": "silence",
+   "value": 0.01,
+   "unit": "s",
+   "source": "crisptrim/silence.py FRAME"
+  },
+  {
+   "name": "auto threshold noise percentile",
+   "group": "silence",
+   "value": 10,
+   "unit": "%",
+   "source": "crisptrim/silence.py auto_threshold"
+  },
+  {
+   "name": "auto threshold voice percentile",
+   "group": "silence",
+   "value": 95,
+   "unit": "%",
+   "source": "crisptrim/silence.py auto_threshold"
+  },
+  {
+   "name": "auto threshold position",
+   "group": "silence",
+   "value": 0.3,
+   "source": "crisptrim/silence.py auto_threshold"
+  },
+  {
+   "name": "auto threshold floor limit",
+   "group": "silence",
+   "value": -80,
+   "unit": "dBFS",
+   "source": "crisptrim/silence.py auto_threshold"
+  },
+  {
+   "name": "auto threshold minimum",
+   "group": "silence",
+   "value": -60,
+   "unit": "dBFS",
+   "source": "crisptrim/silence.py auto_threshold"
+  },
+  {
+   "name": "auto threshold below peak",
+   "group": "silence",
+   "value": 6,
+   "unit": "dB",
+   "source": "crisptrim/silence.py auto_threshold"
+  },
+  {
+   "name": "threshold when empty",
+   "group": "silence",
+   "value": -45,
+   "unit": "dBFS",
+   "source": "crisptrim/silence.py auto_threshold"
+  },
+  {
+   "name": "min silence",
+   "group": "silence",
+   "value": 0.5,
+   "unit": "s",
+   "source": "crisptrim/silence.py SilenceParams"
+  },
+  {
+   "name": "min sound",
+   "group": "silence",
+   "value": 0.08,
+   "unit": "s",
+   "source": "crisptrim/silence.py SilenceParams"
+  },
+  {
+   "name": "margin",
+   "group": "cuts",
+   "value": 0.15,
+   "unit": "s",
+   "source": "crisptrim/cutter.py CutParams"
+  },
+  {
+   "name": "min keep",
+   "group": "cuts",
+   "value": 0.25,
+   "unit": "s",
+   "source": "crisptrim/cutter.py CutParams"
+  },
+  {
+   "name": "filler pad",
+   "group": "cuts",
+   "value": 0.03,
+   "unit": "s",
+   "source": "crisptrim/cutter.py CutParams"
+  },
+  {
+   "name": "max filler extend",
+   "group": "cuts",
+   "value": 1.0,
+   "unit": "s",
+   "source": "crisptrim/cutter.py CutParams"
+  },
+  {
+   "name": "fps snap tolerance",
+   "group": "media",
+   "value": 0.01,
+   "source": "crisptrim/media.py snap_fps"
+  },
+  {
+   "name": "thumbnail width",
+   "group": "media",
+   "value": 240,
+   "unit": "px",
+   "source": "crisptrim/media.py make_thumbnail"
+  },
+  {
+   "name": "thumbnail time cap",
+   "group": "media",
+   "value": 3.0,
+   "unit": "s",
+   "source": "crisptrim/media.py make_thumbnail"
+  },
+  {
+   "name": "thumbnail time ratio",
+   "group": "media",
+   "value": 0.1,
+   "source": "crisptrim/media.py make_thumbnail"
+  },
+  {
+   "name": "ruler height",
+   "group": "timeline",
+   "value": 20,
+   "unit": "px",
+   "source": "crisptrim/app/static/app.js RULER"
+  },
+  {
+   "name": "max zoom",
+   "group": "timeline",
+   "value": 600,
+   "unit": "px/s",
+   "source": "crisptrim/app/static/app.js clampView"
+  },
+  {
+   "name": "zoom button factor",
+   "group": "timeline",
+   "value": 1.6,
+   "source": "crisptrim/app/static/app.js btn-zoom-in"
+  },
+  {
+   "name": "zoom wheel factor",
+   "group": "timeline",
+   "value": 1.25,
+   "source": "crisptrim/app/static/app.js wheel"
+  },
+  {
+   "name": "waveform floor",
+   "group": "timeline",
+   "value": 70,
+   "unit": "dB",
+   "source": "crisptrim/app/static/app.js draw FLOOR"
+  },
+  {
+   "name": "min tick spacing",
+   "group": "timeline",
+   "value": 80,
+   "unit": "px",
+   "source": "crisptrim/app/static/app.js draw"
+  },
+  {
+   "name": "listen padding",
+   "group": "playback",
+   "value": 0.7,
+   "unit": "s",
+   "source": "crisptrim/app/static/app.js listen"
+  },
+  {
+   "name": "jump cut distance",
+   "group": "playback",
+   "value": 0.6,
+   "unit": "s",
+   "source": "crisptrim/app/static/app.js jumpCut"
+  },
+  {
+   "name": "jump pre-roll",
+   "group": "playback",
+   "value": 0.5,
+   "unit": "s",
+   "source": "crisptrim/app/static/app.js jumpCut"
+  },
+  {
+   "name": "preview skip tolerance",
+   "group": "playback",
+   "value": 0.02,
+   "unit": "s",
+   "source": "crisptrim/app/static/app.js activeCutAt"
+  },
+  {
+   "name": "follow playhead edge",
+   "group": "playback",
+   "value": 0.92,
+   "source": "crisptrim/app/static/app.js tick"
+  },
+  {
+   "name": "transcript gap marker",
+   "group": "text",
+   "value": 1.0,
+   "unit": "s",
+   "source": "crisptrim/app/static/app.js renderTranscript"
+  },
+  {
+   "name": "settings debounce",
+   "group": "controls",
+   "value": 180,
+   "unit": "ms",
+   "source": "crisptrim/app/static/app.js onSettings"
+  },
+  {
+   "name": "paragraph gap",
+   "group": "text",
+   "value": 1.5,
+   "unit": "s",
+   "source": "crisptrim/text.py paragraphs"
+  },
+  {
+   "name": "subtitle line width",
+   "group": "text",
+   "value": 42,
+   "unit": "chars",
+   "source": "crisptrim/text.py subtitle_cues"
+  },
+  {
+   "name": "subtitle max duration",
+   "group": "text",
+   "value": 5.0,
+   "unit": "s",
+   "source": "crisptrim/text.py subtitle_cues"
+  },
+  {
+   "name": "subtitle pause split",
+   "group": "text",
+   "value": 0.8,
+   "unit": "s",
+   "source": "crisptrim/text.py subtitle_cues"
+  },
+  {
+   "name": "subtitle natural pause",
+   "group": "text",
+   "value": 0.3,
+   "unit": "s",
+   "source": "crisptrim/text.py subtitle_cues"
+  },
+  {
+   "name": "subtitle min duration",
+   "group": "text",
+   "value": 0.7,
+   "unit": "s",
+   "source": "crisptrim/text.py subtitle_cues"
+  },
+  {
+   "name": "subtitle gap before next",
+   "group": "text",
+   "value": 0.04,
+   "unit": "s",
+   "source": "crisptrim/text.py subtitle_cues"
+  },
+  {
+   "name": "update cache",
+   "group": "updates",
+   "value": 21600,
+   "unit": "s",
+   "source": "crisptrim/updates.py TTL"
+  },
+  {
+   "name": "update timeout",
+   "group": "updates",
+   "value": 5,
+   "unit": "s",
+   "source": "crisptrim/updates.py fetch_latest"
+  },
+  {
+   "name": "window width",
+   "group": "window",
+   "value": 1440,
+   "unit": "px",
+   "source": "crisptrim/app/server.py main"
+  },
+  {
+   "name": "window height",
+   "group": "window",
+   "value": 900,
+   "unit": "px",
+   "source": "crisptrim/app/server.py main"
+  },
+  {
+   "name": "default model",
+   "group": "transcription",
+   "value": "large",
+   "source": "crisptrim/app/server.py State"
+  },
+  {
+   "name": "language",
+   "group": "transcription",
+   "value": "fr",
+   "source": "crisptrim/app/server.py State"
+  },
+  {
+   "name": "transcription in Rust",
+   "group": "transcription",
+   "value": "cache only (v1)",
+   "estimated": true
+  },
+  {
+   "name": "data folder marker",
+   "group": "launcher",
+   "value": "install.json",
+   "source": "launcher script Paths.__init__ (run by function 0x140004470)"
+  },
+  {
+   "name": "bundled ffmpeg folder",
+   "group": "launcher",
+   "value": "bin",
+   "source": "launcher script tool_env (run by function 0x140004470)"
+  },
+  {
+   "name": "native code has cut rules",
+   "group": "launcher",
+   "value": false,
+   "source": "function 0x140004c60 / 0x140004470: PyInstaller bootloader only; no matching strings (ev_c7e9b35c)"
+  }
+ ]
+}

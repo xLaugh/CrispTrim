@@ -1,19 +1,15 @@
-.venv/
-__pycache__/
-.pytest_cache/
+# Construction
+/target/
+/dist/
+
+# Réglage local de ce PC (compilateur rustup forcé) : pas pour les autres machines
+/.cargo/
+
+# Captures et fichiers de test locaux
+/shots/
 .crisptrim-cache/
 *_crisptrim.*
-samples/
-
-# Données personnelles et locales (jamais envoyées)
-transcriptions/
-.claude/
 *.part.mp4
-*.proxy.mp4
+
 .DS_Store
 Thumbs.db
-
-# Construction de l'installateur
-build/
-dist/
-installer/payload.zip

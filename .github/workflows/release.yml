@@ -58,41 +58,9 @@ jobs:
           if [ -f "docs/release-$GITHUB_REF_NAME.md" ]; then notes="--notes-file docs/release-$GITHUB_REF_NAME.md"; else notes="--generate-notes"; fi
           gh release create "$GITHUB_REF_NAME" dist/CrispTrim-Setup.exe dist/CrispTrim.exe --title "CrispTrim $GITHUB_REF_NAME" $notes --verify-tag
 
-  # Module carte graphique (crisptrim-gpu.exe) : le même programme compilé avec CUDA. CrispTrim.exe le
-  # télécharge depuis la release sur les PC NVIDIA. PTX pour sm_80 : RTX 30 et suivantes (compilé à la volée).
+  # Module carte graphique : construit et joint à la release par l'action « Module GPU ».
   gpu-module:
     needs: release
-    # Visual Studio 2022 : compatible avec nvcc de CUDA 12.9 (windows-latest peut avoir une version plus récente).
-    runs-on: windows-2022
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: ilammy/msvc-dev-cmd@v1
-      - name: Installer CUDA 12.9 (compilateur et bibliothèques utiles seulement)
-        uses: Jimver/cuda-toolkit@v0.2.36
-        with:
-          cuda: "12.9.1"
-          method: network
-          sub-packages: '["nvcc", "cudart", "cublas", "cublas_dev", "curand", "curand_dev", "nvrtc", "nvrtc_dev"]'
-      - name: Construire crisptrim-gpu.exe
-        shell: bash
-        env:
-          CUDA_COMPUTE_CAP: "80"
-          NVCC_APPEND_FLAGS: "-allow-unsupported-compiler"
-        run: |
-          set +e
-          cargo build --release --locked --features cuda 2>&1 | tee build.log
-          code=${PIPESTATUS[0]}
-          set -e
-          if [ "$code" != 0 ]; then
-            # erreurs reprises en annotations (lisibles sur la page de l'action)
-            grep -iE "error|fatal|unsupported|cannot|not found" build.log | head -20 | while IFS= read -r l; do echo "::error::$l"; done
-            exit 1
-          fi
-          mkdir -p dist
-          cp target/release/crisptrim.exe dist/crisptrim-gpu.exe
-      - name: Joindre le module à la release
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh release upload "$GITHUB_REF_NAME" dist/crisptrim-gpu.exe --clobber
+    uses: ./.github/workflows/gpu-module.yml
+    permissions:
+      contents: write

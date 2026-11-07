@@ -1,0 +1,52 @@
+# Module carte graphique (crisptrim-gpu.exe) : le même programme compilé avec CUDA. CrispTrim.exe le
+# télécharge depuis la release sur les PC NVIDIA. PTX pour sm_80 : RTX 30 et suivantes (compilé à la volée).
+# Lancé par l'action Release, ou seul (modification de ce fichier, ou à la main) pour la release de la
+# version actuelle du code.
+name: Module GPU
+
+on:
+  workflow_call:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: [".github/workflows/gpu-module.yml"]
+
+permissions:
+  contents: write
+
+jobs:
+  gpu-module:
+    # Visual Studio 2022 : compatible avec nvcc de CUDA 12.9.
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: ilammy/msvc-dev-cmd@v1
+      - name: Installer CUDA 12.9 (compilateur et bibliothèques utiles seulement)
+        uses: Jimver/cuda-toolkit@v0.2.36
+        with:
+          cuda: "12.9.1"
+          method: network
+          sub-packages: '["nvcc", "cudart", "cublas", "cublas_dev", "curand", "curand_dev", "nvrtc", "nvrtc_dev"]'
+      # PowerShell et non bash : dans bash, le « link » de Git passe devant link.exe de Visual Studio.
+      - name: Construire crisptrim-gpu.exe
+        shell: pwsh
+        env:
+          CUDA_COMPUTE_CAP: "80"
+          NVCC_APPEND_FLAGS: "-allow-unsupported-compiler"
+        run: |
+          cargo build --release --locked --features cuda 2>&1 | Tee-Object -FilePath build.log
+          if ($LASTEXITCODE -ne 0) {
+            # erreurs reprises en annotations (lisibles sur la page de l'action)
+            Select-String -Path build.log -Pattern 'error|fatal|unsupported|LNK' | Select-Object -First 25 | ForEach-Object { "::error::$($_.Line)" }
+            exit 1
+          }
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Copy-Item target/release/crisptrim.exe dist/crisptrim-gpu.exe
+      - name: Joindre le module à la release de cette version
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(grep -m1 '^version' Cargo.toml | sed -E 's/version = "(.*)"/\1/')
+          gh release upload "v$version" dist/crisptrim-gpu.exe --clobber

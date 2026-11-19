@@ -26,6 +26,8 @@ pub struct CutParams {
     pub cut_retakes: bool,
     /// Respirations à couper (détectées à part dans le son, voir `breaths`).
     pub breaths: Vec<Interval>,
+    /// Coupes faites à la main sur la timeline.
+    pub manual: Vec<Interval>,
 }
 
 impl Default for CutParams {
@@ -40,6 +42,7 @@ impl Default for CutParams {
             extra_fillers: HashSet::new(),
             cut_retakes: true,
             breaths: Vec::new(),
+            manual: Vec::new(),
         }
     }
 }
@@ -53,6 +56,8 @@ pub enum Kind {
     Retake,
     /// Respiration entre deux mots.
     Breath,
+    /// Coupe faite à la main.
+    Manual,
 }
 
 impl Kind {
@@ -63,6 +68,7 @@ impl Kind {
             Kind::Filler => "filler",
             Kind::Retake => "retake",
             Kind::Breath => "breath",
+            Kind::Manual => "manual",
         }
     }
 }
@@ -164,14 +170,25 @@ pub fn compute_cuts(duration: f64, speech: &[Interval], words: Option<&[Word]>, 
     let breaths: Vec<Interval> =
         p.breaths.iter().copied().filter(|&(s, e)| !retakes.iter().any(|r| r.start < e && r.end > s)).collect();
     keep = subtract(&keep, &merge(&breaths));
+    let manual = merge(&p.manual);
+    keep = subtract(&keep, &manual);
 
     let keep: Vec<Interval> = merge(&keep).into_iter().filter(|(s, e)| e - s >= p.min_keep).collect();
 
     let mut regions: Vec<Region> = keep.iter().map(|&(s, e)| Region { start: s, end: e, kind: Kind::Keep, text: String::new() }).collect();
     // Une coupe qui touche une reprise ou une respiration est découpée (silence avant / reprise /
     // silence après) : garder la reprise à la main ne ramène pas aussi le silence voisin.
-    let mut special: Vec<(f64, f64, Kind, String)> = retakes.iter().map(|r| (r.start, r.end, Kind::Retake, r.text.clone())).collect();
-    special.extend(breaths.iter().map(|&(s, e)| (s, e, Kind::Breath, String::new())));
+    // les coupes manuelles d'abord : elles priment sur le reste
+    let mut special: Vec<(f64, f64, Kind, String)> = manual.iter().map(|&(s, e)| (s, e, Kind::Manual, String::new())).collect();
+    special.extend(
+        retakes
+            .iter()
+            .filter(|r| !manual.iter().any(|&(s, e)| s <= r.start && r.end <= e))
+            .map(|r| (r.start, r.end, Kind::Retake, r.text.clone())),
+    );
+    special.extend(
+        breaths.iter().filter(|&&(bs, be)| !manual.iter().any(|&(s, e)| s <= bs && be <= e)).map(|&(s, e)| (s, e, Kind::Breath, String::new())),
+    );
     special.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
     let mut pieces: Vec<(f64, f64, Option<(Kind, String)>)> = Vec::new();
     for (s, e) in invert(&keep, 0.0, duration) {
@@ -256,6 +273,16 @@ mod tests {
         assert!(r.regions.iter().any(|g| g.kind == Kind::Filler && g.text == "euh"));
         assert_eq!(r.keep.len(), 2);
         assert!((r.keep[0].1 - 1.15).abs() < 1e-9 && (r.keep[1].0 - 2.45).abs() < 1e-9);
+    }
+
+    #[test]
+    fn manual_cut_inside_speech() {
+        let p = CutParams { manual: vec![(1.0, 1.6)], ..Default::default() };
+        let r = compute_cuts(4.0, &[(0.0, 4.0)], None, &p);
+        let m: Vec<&Region> = r.regions.iter().filter(|g| g.kind == Kind::Manual).collect();
+        assert_eq!(m.len(), 1);
+        assert!((m[0].start - 1.0).abs() < 1e-9 && (m[0].end - 1.6).abs() < 1e-9);
+        assert_eq!(r.keep, vec![(0.0, 1.0), (1.6, 4.0)]);
     }
 
     #[test]

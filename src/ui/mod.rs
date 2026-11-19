@@ -33,6 +33,7 @@ pub enum CutFilter {
     Filler,
     Retake,
     Breath,
+    Manual,
     Silence,
 }
 
@@ -65,6 +66,8 @@ pub struct View {
 pub struct App {
     /// Pour redessiner la fenêtre depuis un fil de travail.
     repaint: egui::Context,
+    /// Zone en cours de sélection sur la timeline (Maj + glisser) : début, fin.
+    pub tl_sel: Option<(f64, f64)>,
     config: Arc<Mutex<Config>>,
     queue: Queue,
     jobs: Vec<JobRef>,
@@ -128,6 +131,7 @@ impl App {
         let queue = Queue::new(config.clone(), move || ctx.request_repaint());
         let mut app = App {
             repaint: cc.egui_ctx.clone(),
+            tl_sel: None,
             config,
             queue,
             jobs: Vec::new(),
@@ -361,6 +365,33 @@ impl App {
         }
     }
 
+    /// Coupe faite à la main sur la timeline (Maj + glisser).
+    pub fn add_manual_cut(&mut self, a: f64, b: f64) {
+        let (s, e) = (a.min(b), a.max(b));
+        if e - s < 0.04 {
+            return;
+        }
+        let Some(id) = self.sel else { return };
+        let Some(job) = self.job(id) else { return };
+        let mut j = job.lock().unwrap();
+        j.manual.push((s, e));
+        jobs::recut(&mut j);
+        drop(j);
+        self.toast(&format!("Coupe ajoutée ({:.2} s). Ctrl + Z pour l'annuler.", e - s), false);
+    }
+
+    /// Ctrl + Z : retire la dernière coupe faite à la main.
+    pub fn undo_manual_cut(&mut self) {
+        let Some(id) = self.sel else { return };
+        let Some(job) = self.job(id) else { return };
+        let mut j = job.lock().unwrap();
+        if j.manual.pop().is_some() {
+            jobs::recut(&mut j);
+            drop(j);
+            self.toast("Dernière coupe manuelle annulée.", false);
+        }
+    }
+
     /// Segments gardés au final : parole + coupes rétablies à la main.
     pub fn final_keep(&self) -> Vec<(f64, f64)> {
         let mut parts: Vec<(f64, f64)> =
@@ -543,6 +574,9 @@ impl App {
         });
         if space {
             self.player.toggle();
+        }
+        if ctx.input(|i| i.modifiers.command && i.key_pressed(egui::Key::Z)) {
+            self.undo_manual_cut();
         }
         if p {
             self.preview = !self.preview;

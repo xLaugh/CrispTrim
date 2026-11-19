@@ -1,7 +1,7 @@
 //! Barre du haut, liste des rushes, centre (lecteur + timeline).
 
 use super::jobs::Stage;
-use super::theme::{self, bfont, font, rgba, stroke, Btn, ACCENT, ACCENT2, BORDER, BORDER2, FAINT, FILLER, MUTED, PANEL, PANEL2, PANEL3, RETAKE, BREATH, TEXT};
+use super::theme::{self, bfont, font, rgba, stroke, Btn, ACCENT, ACCENT2, BORDER, BORDER2, FAINT, FILLER, MUTED, PANEL, PANEL2, PANEL3, RETAKE, BREATH, MANUAL, TEXT};
 use super::timeline::{self, fmt};
 use super::{App, Modal};
 use crate::engine::transcribe::MODELS;
@@ -488,7 +488,7 @@ fn transport(app: &mut App, ui: &mut Ui) {
 }
 
 // par ordre d'importance : si la place manque, la fin de la liste disparaît
-const LEGEND: [(&str, u8); 4] = [("Silence", 1), ("Hésitation", 2), ("Reprise", 3), ("Respiration", 4)];
+const LEGEND: [(&str, u8); 5] = [("Silence", 1), ("Hésitation", 2), ("Reprise", 3), ("Respiration", 4), ("Manuelle", 5)];
 
 
 fn legend(ui: &mut Ui) {
@@ -517,8 +517,11 @@ fn legend(ui: &mut Ui) {
             3 => {
                 p.rect_filled(sw, CornerRadius::same(3), RETAKE);
             }
-            _ => {
+            4 => {
                 p.rect_filled(sw, CornerRadius::same(3), BREATH);
+            }
+            _ => {
+                p.rect_filled(sw, CornerRadius::same(3), MANUAL);
             }
         }
         p.text(Pos2::new(sw.right() + 5.0, r.center().y), Align2::LEFT_CENTER, label, font(11.5), MUTED);
@@ -541,9 +544,25 @@ fn timeline_area(app: &mut App, ui: &mut Ui, r: Rect) {
             app.tl.clamp(d);
         }
         let x = |pos: Pos2| (pos.x - r.left()).clamp(0.0, r.width());
-        if resp.drag_started() || resp.clicked() || resp.dragged() {
-            if let Some(pos) = resp.interact_pointer_pos() {
-                let t = app.tl.x_to_t(x(pos));
+        let shift = ui.input(|i| i.modifiers.shift);
+        let pointer_t = resp.interact_pointer_pos().map(|pos| app.tl.x_to_t(x(pos)).clamp(0.0, d));
+        // Maj + glisser : sélectionne une zone et la coupe au relâchement
+        if resp.drag_started() && shift {
+            if let Some(t) = pointer_t {
+                app.tl_sel = Some((t, t));
+            }
+        }
+        if let Some((a, _)) = app.tl_sel {
+            if let Some(t) = pointer_t {
+                app.tl_sel = Some((a, t));
+            }
+            if resp.drag_stopped() || !resp.dragged() && !resp.drag_started() {
+                if let Some((a, b)) = app.tl_sel.take() {
+                    app.add_manual_cut(a, b);
+                }
+            }
+        } else if resp.drag_started() || resp.clicked() || resp.dragged() {
+            if let Some(t) = pointer_t {
                 app.seek(t);
             }
         }
@@ -571,7 +590,8 @@ fn timeline_area(app: &mut App, ui: &mut Ui, r: Rect) {
                 app.tl.clamp(d);
             }
         }
-        resp.on_hover_cursor(CursorIcon::PointingHand);
+        let shift_hover = ui.input(|i| i.modifiers.shift);
+        resp.on_hover_cursor(if shift_hover || app.tl_sel.is_some() { CursorIcon::Crosshair } else { CursorIcon::PointingHand });
     }
     let p = ui.painter().with_clip_rect(r);
     if has_info {
@@ -584,6 +604,15 @@ fn timeline_area(app: &mut App, ui: &mut Ui, r: Rect) {
             playhead: app.player.time(),
         };
         timeline::draw(&p, r, &app.tl, &args);
+        // zone en cours de sélection
+        if let Some((a, b)) = app.tl_sel {
+            let (s, e) = (a.min(b), a.max(b));
+            let x0 = r.left() + ((s - app.tl.start) * app.tl.pps) as f32;
+            let x1 = r.left() + ((e - app.tl.start) * app.tl.pps) as f32;
+            let sr = Rect::from_min_max(Pos2::new(x0, r.top()), Pos2::new(x1.max(x0 + 1.0), r.bottom()));
+            p.rect(sr, CornerRadius::ZERO, rgba(255, 107, 107, 0.22), stroke(1.0, MANUAL), StrokeKind::Inside);
+            p.text(Pos2::new(sr.center().x, r.top() + 30.0), Align2::CENTER_CENTER, format!("couper {:.2} s", e - s), font(11.5), MANUAL);
+        }
     } else {
         p.rect(r, CornerRadius::same(12), PANEL, stroke(1.0, BORDER), StrokeKind::Inside);
     }
@@ -609,10 +638,11 @@ fn hints(ui: &Ui, r: Rect) {
     let p = ui.painter();
     let y = r.center().y;
     let mut x = r.left();
-    let items: [(&[&str], &str); 5] = [
+    let items: [(&[&str], &str); 6] = [
         (&["Clic"], "se placer"),
         (&["Double-clic"], "garder / recouper"),
         (&["Ctrl"], "+ molette : zoom"),
+        (&["Maj"], "+ glisser : couper"),
         (&["Espace"], "lecture"),
         (&["←", "→"], "coupe suivante"),
     ];

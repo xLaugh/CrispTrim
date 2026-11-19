@@ -114,6 +114,7 @@ pub fn draw(painter: &egui::Painter, rect: Rect, tl: &Timeline, a: &DrawArgs) {
                 Kind::Filler => rgba(255, 157, 66, 0.6),
                 Kind::Retake => rgba(255, 95, 162, 0.6),
                 Kind::Breath => rgba(94, 200, 255, 0.6),
+                Kind::Manual => rgba(255, 107, 107, 0.6),
                 _ => rgba(160, 168, 185, 0.45),
             };
             let rr = r.shrink(0.5);
@@ -124,6 +125,9 @@ pub fn draw(painter: &egui::Painter, rect: Rect, tl: &Timeline, a: &DrawArgs) {
         if c.kind == Kind::Filler {
             p.rect_filled(r, CornerRadius::ZERO, rgba(255, 157, 66, 0.22));
             p.rect_filled(Rect::from_min_size(r.min, Vec2::new(cw, 3.0)), CornerRadius::ZERO, theme::FILLER);
+        } else if c.kind == Kind::Manual {
+            p.rect_filled(r, CornerRadius::ZERO, rgba(255, 107, 107, 0.2));
+            p.rect_filled(Rect::from_min_size(r.min, Vec2::new(cw, 3.0)), CornerRadius::ZERO, theme::MANUAL);
         } else if c.kind == Kind::Breath {
             p.rect_filled(r, CornerRadius::ZERO, rgba(94, 200, 255, 0.18));
             p.rect_filled(Rect::from_min_size(r.min, Vec2::new(cw, 3.0)), CornerRadius::ZERO, theme::BREATH);

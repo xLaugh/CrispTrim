@@ -56,7 +56,8 @@ est utilisé automatiquement.
 4. Onglet **Coupes** : écoute chaque coupe (▶) et décoche celles à garder. Onglet **Texte** : transcription cliquable.
 5. Exporte vers ton logiciel de montage.
 
-Raccourcis : Espace (lecture), P (aperçu monté), ← / → (coupe précédente / suivante), Ctrl + molette (zoom).
+Raccourcis : Espace (lecture), P (aperçu monté), ← / → (coupe précédente / suivante), Ctrl + molette (zoom),
+**Maj + glisser** sur la timeline (couper une zone à la main), Ctrl + Z (annuler la dernière coupe manuelle).
 
 ## Ligne de commande
 

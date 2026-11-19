@@ -97,6 +97,8 @@ pub struct Job {
     pub voice: Arc<VoiceFrames>,
     /// Respirations détectées entre les mots (secondes de la source).
     pub breaths: Vec<(f64, f64)>,
+    /// Coupes faites à la main sur la timeline (dans l'ordre où elles ont été faites).
+    pub manual: Vec<(f64, f64)>,
     pub words: Option<Vec<Word>>,
     pub words_source: Option<PathBuf>,
     pub threshold: f64,
@@ -153,6 +155,7 @@ pub fn recut(job: &mut Job) {
         cut_noises: s.cut_noises,
         cut_retakes: s.cut_retakes,
         breaths: if s.breaths == BreathMode::Cut { breaths.clone() } else { Vec::new() },
+        manual: job.manual.clone(),
         ..Default::default()
     };
     job.breaths = breaths;
@@ -209,6 +212,7 @@ impl Queue {
             db: Arc::new(Vec::new()),
             voice: Arc::new(VoiceFrames::default()),
             breaths: Vec::new(),
+            manual: Vec::new(),
             words: None,
             words_source: None,
             threshold: 0.0,

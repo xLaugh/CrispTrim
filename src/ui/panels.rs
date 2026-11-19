@@ -1,7 +1,7 @@
 //! Barre du haut, liste des rushes, centre (lecteur + timeline).
 
 use super::jobs::Stage;
-use super::theme::{self, bfont, font, rgba, stroke, Btn, ACCENT, ACCENT2, BORDER, BORDER2, FAINT, FILLER, MUTED, PANEL, PANEL2, PANEL3, TEXT};
+use super::theme::{self, bfont, font, rgba, stroke, Btn, ACCENT, ACCENT2, BORDER, BORDER2, FAINT, FILLER, MUTED, PANEL, PANEL2, PANEL3, RETAKE, TEXT};
 use super::timeline::{self, fmt};
 use super::{App, Modal};
 use crate::engine::transcribe::MODELS;
@@ -462,7 +462,7 @@ fn transport(app: &mut App, ui: &mut Ui) {
         timecode(ui, "M O N T É", &fmt(app.edited_time(t), true), ACCENT2);
         ui.add_space(8.0);
         let mut pv = app.preview;
-        if theme::switch(ui, &mut pv, "Aperçu monté", MUTED, font(12.5), 200.0) {
+        if theme::switch(ui, &mut pv, "Aperçu monté", MUTED, font(12.5), theme::text_width(ui, "Aperçu monté", font(12.5)) + 52.0) {
             app.preview = pv;
         }
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
@@ -480,7 +480,8 @@ fn transport(app: &mut App, ui: &mut Ui) {
             if theme::icon_button(ui, Vec2::splat(28.0), "−", 13.0, false).on_hover_text("Dézoomer").clicked() {
                 app.tl.zoom(1.0 / 1.6, w / 2.0, d);
             }
-            if ui.ctx().screen_rect().width() > 1360.0 {
+            // la légende seulement si elle tient sans chevaucher « Aperçu monté »
+            if ui.available_width() > legend_width(ui) + 12.0 {
                 ui.add_space(8.0);
                 legend(ui);
             }
@@ -488,9 +489,15 @@ fn transport(app: &mut App, ui: &mut Ui) {
     });
 }
 
+const LEGEND: [(&str, u8); 3] = [("Reprise", 3), ("Hésitation", 2), ("Silence", 1)];
+
+fn legend_width(ui: &Ui) -> f32 {
+    LEGEND.iter().map(|(l, _)| theme::text_width(ui, l, font(11.5)) + 16.0 + 4.0 + ui.spacing().item_spacing.x).sum()
+}
+
 fn legend(ui: &mut Ui) {
     // de droite à gauche
-    for (label, kind) in [("Hésitation", 2), ("Silence", 1), ("Gardé", 0)] {
+    for (label, kind) in LEGEND {
         let w = theme::text_width(ui, label, font(11.5)) + 16.0;
         let (r, _) = ui.allocate_exact_size(Vec2::new(w, 16.0), Sense::hover());
         let p = ui.painter();
@@ -504,8 +511,11 @@ fn legend(ui: &mut Ui) {
                 p.rect_stroke(sw, CornerRadius::same(3), stroke(1.0, grey), StrokeKind::Inside);
                 p.line_segment([sw.left_bottom() + Vec2::new(2.0, -2.0), sw.right_top() + Vec2::new(-2.0, 2.0)], stroke(1.5, grey));
             }
-            _ => {
+            2 => {
                 p.rect_filled(sw, CornerRadius::same(3), FILLER);
+            }
+            _ => {
+                p.rect_filled(sw, CornerRadius::same(3), RETAKE);
             }
         }
         p.text(Pos2::new(sw.right() + 5.0, r.center().y), Align2::LEFT_CENTER, label, font(11.5), MUTED);

@@ -32,6 +32,7 @@ hésitations (transcriptions CrisperWhisper déjà faites) :
   --model NOM              large | turbo | medium | small (défaut : large)
   --language CODE          code langue (défaut : fr)
   --keep-noises            garder les bruits de bouche ([yawn], [cough]…)
+  --keep-retakes           garder les reprises (phrase ratée puis recommencée)
   --extra-filler MOT       mot supplémentaire à couper (répétable)
   --version                affiche la version";
 
@@ -90,6 +91,7 @@ pub fn main(args: Vec<String>) -> i32 {
             "--model" => model = value!("--model"),
             "--language" => language = value!("--language"),
             "--keep-noises" => cut.cut_noises = false,
+            "--keep-retakes" => cut.cut_retakes = false,
             "--extra-filler" => {
                 extra.insert(value!("--extra-filler").to_lowercase());
             }
@@ -242,8 +244,8 @@ pub fn main(args: Vec<String>) -> i32 {
         }
         let s = result.stats();
         println!(
-            "  ✓ {:.1} s → {:.1} s  (−{} %, {} segments, {} hésitations/bruits)  en {:.1} s",
-            s.duration, s.kept, s.removed_pct, s.segments, s.fillers, t0.elapsed().as_secs_f64()
+            "  ✓ {:.1} s → {:.1} s  (−{} %, {} segments, {} hésitations/bruits, {} reprises)  en {:.1} s",
+            s.duration, s.kept, s.removed_pct, s.segments, s.fillers, s.retakes, t0.elapsed().as_secs_f64()
         );
     }
     0

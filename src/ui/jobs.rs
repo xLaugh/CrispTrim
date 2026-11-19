@@ -45,11 +45,12 @@ pub struct Settings {
     pub cut_silences: bool,
     pub cut_fillers: bool,
     pub cut_noises: bool,
+    pub cut_retakes: bool,
 }
 
 impl Default for Settings {
     fn default() -> Self {
-        Settings { threshold_db: None, min_silence: 0.5, margin: 0.15, min_keep: 0.25, cut_silences: true, cut_fillers: true, cut_noises: true }
+        Settings { threshold_db: None, min_silence: 0.5, margin: 0.15, min_keep: 0.25, cut_silences: true, cut_fillers: true, cut_noises: true, cut_retakes: true }
     }
 }
 
@@ -114,7 +115,7 @@ pub fn recut(job: &mut Job) {
     if !s.cut_silences {
         speech = vec![(0.0, duration)];
     }
-    let params = CutParams { margin: s.margin, min_keep: s.min_keep, cut_fillers: s.cut_fillers, cut_noises: s.cut_noises, ..Default::default() };
+    let params = CutParams { margin: s.margin, min_keep: s.min_keep, cut_fillers: s.cut_fillers, cut_noises: s.cut_noises, cut_retakes: s.cut_retakes, ..Default::default() };
     let res = compute_cuts(duration, &speech, job.words.as_deref(), &params);
     job.threshold = thr;
     job.stats = res.stats();

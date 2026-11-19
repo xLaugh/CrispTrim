@@ -438,6 +438,7 @@ struct JsonStats {
     removed_pct: f64,
     segments: usize,
     fillers: usize,
+    retakes: usize,
 }
 
 #[derive(Serialize)]
@@ -465,7 +466,7 @@ pub fn write_json(info: &MediaInfo, result: &CutResult, words: Option<&[Word]>, 
         source: info.path.display().to_string(),
         fps: format!("{}/{}", info.fps.num, info.fps.den),
         threshold_db: (threshold_db * 10.0).round_ties_even() / 10.0,
-        stats: JsonStats { duration: s.duration, kept: s.kept, removed: s.removed, removed_pct: s.removed_pct, segments: s.segments, fillers: s.fillers },
+        stats: JsonStats { duration: s.duration, kept: s.kept, removed: s.removed, removed_pct: s.removed_pct, segments: s.segments, fillers: s.fillers, retakes: s.retakes },
         regions: result.regions.iter().map(|g| JsonRegion { start: r3(g.start), end: r3(g.end), kind: g.kind.as_str(), text: &g.text }).collect(),
         words: words.unwrap_or(&[]),
     };

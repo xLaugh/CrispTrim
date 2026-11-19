@@ -31,6 +31,7 @@ pub enum Tab {
 pub enum CutFilter {
     All,
     Filler,
+    Retake,
     Silence,
 }
 

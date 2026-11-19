@@ -5,6 +5,7 @@ pub mod export;
 pub mod fillers;
 pub mod gpu_worker;
 pub mod intervals;
+pub mod retakes;
 pub mod media;
 pub mod silence;
 pub mod text;

@@ -2,7 +2,7 @@
 
 use super::jobs::{JobRef, Stage};
 use super::panels::{dashed_rect, elide, hline, in_rect};
-use super::theme::{self, bfont, font, rgba, stroke, Btn, ACCENT, ACCENT2, BORDER, BORDER2, FAINT, FILLER, MUTED, PANEL, PANEL2, PANEL3, TEXT};
+use super::theme::{self, bfont, font, rgba, stroke, Btn, ACCENT, ACCENT2, BORDER, BORDER2, FAINT, FILLER, MUTED, PANEL, PANEL2, PANEL3, RETAKE, TEXT};
 use super::timeline::fmt;
 use super::{App, CutFilter, Modal, Tab};
 use crate::engine::cutter::{to_frames, Kind};
@@ -147,6 +147,8 @@ fn settings_tab(app: &mut App, ui: &mut Ui) {
         changed |= theme::switch(ui, &mut app.edit.cut_fillers, "Couper les hésitations (« euh », « hum »)", TEXT, font(13.5), w);
         ui.add_space(12.0);
         changed |= theme::switch(ui, &mut app.edit.cut_noises, "Couper les bruits de bouche", TEXT, font(13.5), w);
+        ui.add_space(12.0);
+        changed |= theme::switch(ui, &mut app.edit.cut_retakes, "Couper les reprises (phrase ratée puis recommencée)", TEXT, font(13.5), w);
         ui.add_space(10.0);
         let device = if crate::engine::whisper::gpu_available() { "sur ta carte graphique" } else { "sur ton processeur" };
         ui.add(egui::Label::new(RichText::new(format!("Détectés par CrisperWhisper, en local {device}.")).size(11.5).color(FAINT)).wrap());
@@ -192,11 +194,13 @@ fn cuts_tab(app: &mut App, ui: &mut Ui) {
             let label = match app.filter {
                 CutFilter::All => "Toutes",
                 CutFilter::Filler => "Hésitations",
+                CutFilter::Retake => "Reprises",
                 CutFilter::Silence => "Silences",
             };
             egui::ComboBox::from_id_salt("cuts-filter").selected_text(RichText::new(label).size(12.0)).width(96.0).show_ui(ui, |ui| {
                 ui.selectable_value(&mut app.filter, CutFilter::All, "Toutes");
                 ui.selectable_value(&mut app.filter, CutFilter::Filler, "Hésitations");
+                ui.selectable_value(&mut app.filter, CutFilter::Retake, "Reprises");
                 ui.selectable_value(&mut app.filter, CutFilter::Silence, "Silences");
             });
         });
@@ -209,6 +213,7 @@ fn cuts_tab(app: &mut App, ui: &mut Ui) {
     for (i, c) in app.cuts.iter().enumerate() {
         match app.filter {
             CutFilter::Filler if c.kind != Kind::Filler => continue,
+            CutFilter::Retake if c.kind != Kind::Retake => continue,
             CutFilter::Silence if c.kind != Kind::Silence => continue,
             _ => {}
         }
@@ -230,7 +235,11 @@ fn cuts_tab(app: &mut App, ui: &mut Ui) {
             p.rect(cb, CornerRadius::same(3), Color32::WHITE.gamma_multiply(0.5), stroke(1.0, MUTED), StrokeKind::Inside);
         }
         let x = cb.right() + 10.0;
-        let (label, color) = if c.kind == Kind::Filler { ("Hésitation", FILLER) } else { ("Silence", Color32::from_rgb(0x7a, 0x81, 0x91)) };
+        let (label, color) = match c.kind {
+            Kind::Filler => ("Hésitation", FILLER),
+            Kind::Retake => ("Reprise", RETAKE),
+            _ => ("Silence", Color32::from_rgb(0x7a, 0x81, 0x91)),
+        };
         p.rect_filled(Rect::from_min_size(Pos2::new(x, r.top() + 13.0), Vec2::splat(10.0)), CornerRadius::same(3), color.gamma_multiply(a));
         let g = p.text(Pos2::new(x + 16.0, r.top() + 18.0), Align2::LEFT_CENTER, label, bfont(12.5), TEXT.gamma_multiply(a));
         if !c.on {
@@ -239,7 +248,8 @@ fn cuts_tab(app: &mut App, ui: &mut Ui) {
         let when = format!("{} → {} · {:.2} s", fmt(c.start, true), fmt(c.end, true), c.end - c.start);
         p.text(Pos2::new(x, r.top() + 36.0), Align2::LEFT_CENTER, when, font(11.5), MUTED.gamma_multiply(a));
         if !c.text.is_empty() {
-            p.text(Pos2::new(x, r.top() + 54.0), Align2::LEFT_CENTER, &c.text, font(12.0), FILLER.gamma_multiply(a));
+            let text = elide(ui, &c.text, font(12.0), r.right() - x - 48.0);
+            p.text(Pos2::new(x, r.top() + 54.0), Align2::LEFT_CENTER, text, font(12.0), color.gamma_multiply(a));
         }
         let lr = Rect::from_min_size(Pos2::new(r.right() - 38.0, r.top() + 11.0), Vec2::splat(28.0));
         let lo = over(lr);
@@ -307,9 +317,12 @@ fn text_tab(app: &mut App, ui: &mut Ui) {
                 ui.painter().text(r.center(), Align2::CENTER_CENTER, s, font(10.5), FAINT);
             }
             let mid = (w.start + w.end) / 2.0;
-            let cut = app.cuts.iter().find(|c| c.kind == Kind::Filler && mid >= c.start && mid <= c.end);
+            let cut = app.cuts.iter().find(|c| matches!(c.kind, Kind::Filler | Kind::Retake) && mid >= c.start && mid <= c.end);
             let (color, struck) = match cut {
-                Some(c) => (if c.on { FILLER.gamma_multiply(0.7) } else { FILLER }, c.on),
+                Some(c) => {
+                    let base = if c.kind == Kind::Retake { RETAKE } else { FILLER };
+                    (if c.on { base.gamma_multiply(0.7) } else { base }, c.on)
+                }
                 None => (TEXT, false),
             };
             let ww = theme::text_width(ui, &w.word, font(14.0)) + 2.0;

@@ -110,7 +110,11 @@ pub fn draw(painter: &egui::Painter, rect: Rect, tl: &Timeline, a: &DrawArgs) {
         let cw = (x(c.end) - cx).max(1.0);
         let r = Rect::from_min_size(Pos2::new(cx, body_top), Vec2::new(cw, body_h));
         if !c.on {
-            let col = if c.kind == Kind::Filler { rgba(255, 157, 66, 0.6) } else { rgba(160, 168, 185, 0.45) };
+            let col = match c.kind {
+                Kind::Filler => rgba(255, 157, 66, 0.6),
+                Kind::Retake => rgba(255, 95, 162, 0.6),
+                _ => rgba(160, 168, 185, 0.45),
+            };
             let rr = r.shrink(0.5);
             let pts = vec![rr.left_top(), rr.right_top(), rr.right_bottom(), rr.left_bottom(), rr.left_top()];
             p.extend(Shape::dashed_line(&pts, stroke(1.0, col), 4.0, 3.0));
@@ -119,6 +123,9 @@ pub fn draw(painter: &egui::Painter, rect: Rect, tl: &Timeline, a: &DrawArgs) {
         if c.kind == Kind::Filler {
             p.rect_filled(r, CornerRadius::ZERO, rgba(255, 157, 66, 0.22));
             p.rect_filled(Rect::from_min_size(r.min, Vec2::new(cw, 3.0)), CornerRadius::ZERO, theme::FILLER);
+        } else if c.kind == Kind::Retake {
+            p.rect_filled(r, CornerRadius::ZERO, rgba(255, 95, 162, 0.2));
+            p.rect_filled(Rect::from_min_size(r.min, Vec2::new(cw, 3.0)), CornerRadius::ZERO, theme::RETAKE);
         } else {
             p.rect_filled(r, CornerRadius::ZERO, theme::PANEL);
             theme::hatch(&p, r, rgba(140, 148, 165, 0.22));

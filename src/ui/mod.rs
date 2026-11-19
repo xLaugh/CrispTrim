@@ -32,6 +32,7 @@ pub enum CutFilter {
     All,
     Filler,
     Retake,
+    Breath,
     Silence,
 }
 

@@ -383,9 +383,29 @@ fn ffmpeg_major() -> u32 {
 }
 
 /// Rend une vidéo nettoyée (réencodage) via ffmpeg trim/concat.
-pub fn render_mp4(info: &MediaInfo, frames: &Frames, out: &Path) -> Result<(), String> {
+/// Retouches du son de la vidéo montée.
+#[derive(Clone, Debug, Default)]
+pub struct AudioFx {
+    /// Respirations à atténuer (secondes de la source) : −20 dB.
+    pub soften: Vec<(f64, f64)>,
+    /// Filtre anti-claquements de bouche (adeclick).
+    pub declick: bool,
+}
+
+pub fn render_mp4(info: &MediaInfo, frames: &Frames, out: &Path, fx: &AudioFx) -> Result<(), String> {
     let fps = info.fps;
     let (mut parts, mut labels) = (String::new(), String::new());
+    // son retouché une fois (temps de la source), puis réparti entre les segments
+    let mut audio_in = "[0:a]".to_string();
+    let soften: Vec<String> = fx.soften.iter().map(|(s, e)| format!("between(t,{s:.3},{e:.3})")).collect();
+    if info.has_audio && !soften.is_empty() {
+        parts.push_str(&format!("[0:a]volume=0.1:enable='{}'[asoft];", soften.join("+")));
+        audio_in = "[asoft]".to_string();
+    }
+    if info.has_audio && audio_in != "[0:a]" {
+        let outs: String = (0..frames.len()).map(|i| format!("[as{i}]")).collect();
+        parts.push_str(&format!("{audio_in}asplit={}{outs};", frames.len().max(1)));
+    }
     for (i, &(a, b)) in frames.iter().enumerate() {
         let (s, e) = (fps.secs(a), fps.secs(b));
         if info.has_video {
@@ -393,13 +413,18 @@ pub fn render_mp4(info: &MediaInfo, frames: &Frames, out: &Path) -> Result<(), S
             labels.push_str(&format!("[v{i}]"));
         }
         if info.has_audio {
-            parts.push_str(&format!("[0:a]atrim=start={s:.6}:end={e:.6},asetpts=PTS-STARTPTS[a{i}];"));
+            let src = if audio_in == "[0:a]" { "[0:a]".to_string() } else { format!("[as{i}]") };
+            parts.push_str(&format!("{src}atrim=start={s:.6}:end={e:.6},asetpts=PTS-STARTPTS[a{i}];"));
             labels.push_str(&format!("[a{i}]"));
         }
     }
     let (v, a) = (info.has_video as u8, info.has_audio as u8);
-    let outs = format!("{}{}", if v == 1 { "[outv]" } else { "" }, if a == 1 { "[outa]" } else { "" });
-    let graph = format!("{parts}{labels}concat=n={}:v={v}:a={a}{outs}", frames.len());
+    let declick = a == 1 && fx.declick;
+    let outs = format!("{}{}", if v == 1 { "[outv]" } else { "" }, if a == 1 { if declick { "[araw]" } else { "[outa]" } } else { "" });
+    let mut graph = format!("{parts}{labels}concat=n={}:v={v}:a={a}{outs}", frames.len());
+    if declick {
+        graph.push_str(";[araw]adeclick[outa]");
+    }
 
     let script = std::env::temp_dir().join(format!("crisptrim-{}-{}.txt", std::process::id(), stem(out)));
     std::fs::write(&script, graph).map_err(|e| e.to_string())?;
@@ -439,6 +464,7 @@ struct JsonStats {
     segments: usize,
     fillers: usize,
     retakes: usize,
+    breaths: usize,
 }
 
 #[derive(Serialize)]
@@ -466,7 +492,7 @@ pub fn write_json(info: &MediaInfo, result: &CutResult, words: Option<&[Word]>, 
         source: info.path.display().to_string(),
         fps: format!("{}/{}", info.fps.num, info.fps.den),
         threshold_db: (threshold_db * 10.0).round_ties_even() / 10.0,
-        stats: JsonStats { duration: s.duration, kept: s.kept, removed: s.removed, removed_pct: s.removed_pct, segments: s.segments, fillers: s.fillers, retakes: s.retakes },
+        stats: JsonStats { duration: s.duration, kept: s.kept, removed: s.removed, removed_pct: s.removed_pct, segments: s.segments, fillers: s.fillers, retakes: s.retakes, breaths: s.breaths },
         regions: result.regions.iter().map(|g| JsonRegion { start: r3(g.start), end: r3(g.end), kind: g.kind.as_str(), text: &g.text }).collect(),
         words: words.unwrap_or(&[]),
     };

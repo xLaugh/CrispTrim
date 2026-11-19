@@ -24,6 +24,8 @@ pub struct CutParams {
     pub extra_fillers: HashSet<String>,
     /// Phrases ratées puis recommencées, bégaiements : on garde la dernière tentative.
     pub cut_retakes: bool,
+    /// Respirations à couper (détectées à part dans le son, voir `breaths`).
+    pub breaths: Vec<Interval>,
 }
 
 impl Default for CutParams {
@@ -37,6 +39,7 @@ impl Default for CutParams {
             max_filler_extend: 1.0,
             extra_fillers: HashSet::new(),
             cut_retakes: true,
+            breaths: Vec::new(),
         }
     }
 }
@@ -48,6 +51,8 @@ pub enum Kind {
     Filler,
     /// Tentative ratée d'une phrase recommencée juste après.
     Retake,
+    /// Respiration entre deux mots.
+    Breath,
 }
 
 impl Kind {
@@ -57,6 +62,7 @@ impl Kind {
             Kind::Silence => "silence",
             Kind::Filler => "filler",
             Kind::Retake => "retake",
+            Kind::Breath => "breath",
         }
     }
 }
@@ -78,6 +84,7 @@ pub struct Stats {
     pub segments: usize,
     pub fillers: usize,
     pub retakes: usize,
+    pub breaths: usize,
 }
 
 #[derive(Clone, Debug)]
@@ -87,6 +94,7 @@ pub struct CutResult {
     pub regions: Vec<Region>,
     pub fillers: Vec<Word>,
     pub retakes: Vec<Retake>,
+    pub breaths: Vec<Interval>,
 }
 
 fn round_to(x: f64, digits: i32) -> f64 {
@@ -106,6 +114,7 @@ impl CutResult {
             segments: self.keep.len(),
             fillers: self.fillers.len(),
             retakes: self.retakes.len(),
+            breaths: self.breaths.len(),
         }
     }
 }
@@ -151,33 +160,52 @@ pub fn compute_cuts(duration: f64, speech: &[Interval], words: Option<&[Word]>, 
             keep = subtract(&keep, &merge(&r));
         }
     }
+    // respirations (hors reprises, déjà coupées avec leur tentative)
+    let breaths: Vec<Interval> =
+        p.breaths.iter().copied().filter(|&(s, e)| !retakes.iter().any(|r| r.start < e && r.end > s)).collect();
+    keep = subtract(&keep, &merge(&breaths));
 
     let keep: Vec<Interval> = merge(&keep).into_iter().filter(|(s, e)| e - s >= p.min_keep).collect();
 
     let mut regions: Vec<Region> = keep.iter().map(|&(s, e)| Region { start: s, end: e, kind: Kind::Keep, text: String::new() }).collect();
-    // Une coupe qui touche une reprise est découpée : silence avant / reprise / silence après,
-    // pour que garder la reprise à la main ne ramène pas aussi le silence voisin.
-    let mut pieces: Vec<(f64, f64, bool)> = Vec::new();
+    // Une coupe qui touche une reprise ou une respiration est découpée (silence avant / reprise /
+    // silence après) : garder la reprise à la main ne ramène pas aussi le silence voisin.
+    let mut special: Vec<(f64, f64, Kind, String)> = retakes.iter().map(|r| (r.start, r.end, Kind::Retake, r.text.clone())).collect();
+    special.extend(breaths.iter().map(|&(s, e)| (s, e, Kind::Breath, String::new())));
+    special.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+    let mut pieces: Vec<(f64, f64, Option<(Kind, String)>)> = Vec::new();
     for (s, e) in invert(&keep, 0.0, duration) {
-        let over: Vec<&Retake> = retakes.iter().filter(|r| r.start < e && r.end > s).collect();
-        if over.is_empty() {
-            pieces.push((s, e, false));
-            continue;
+        let mut t = s;
+        for (ss, se, kind, text) in special.iter().filter(|x| x.0 < e && x.1 > s) {
+            let (ss, se) = (ss.max(t), se.min(e));
+            if se <= ss {
+                continue;
+            }
+            if ss - t > 0.05 {
+                pieces.push((t, ss, None));
+            }
+            // reprises voisines (« le le … en en ») : une seule coupe
+            match pieces.last_mut() {
+                Some((_, pe, Some((k, txt)))) if *k == *kind && ss - *pe <= 0.05 => {
+                    *pe = se;
+                    if !text.is_empty() {
+                        txt.push_str(" … ");
+                        txt.push_str(text);
+                    }
+                }
+                _ => pieces.push((if ss - t > 0.05 { ss } else { t }, se, Some((*kind, text.clone())))),
+            }
+            t = se;
         }
-        let rs = over.iter().map(|r| r.start).fold(f64::INFINITY, f64::min).max(s);
-        let re = over.iter().map(|r| r.end).fold(f64::NEG_INFINITY, f64::max).min(e);
-        if rs - s > 0.05 {
-            pieces.push((s, rs, false));
-        }
-        pieces.push((rs, re, true));
-        if e - re > 0.05 {
-            pieces.push((re, e, false));
+        if e - t > 0.05 || t == s {
+            pieces.push((t, e, None));
+        } else if let Some(last) = pieces.last_mut() {
+            last.1 = e; // reste minuscule : rattaché à la coupe précédente
         }
     }
-    for (s, e, is_retake) in pieces {
-        if is_retake {
-            let text = retakes.iter().filter(|r| r.start < e && r.end > s).map(|r| r.text.as_str()).collect::<Vec<_>>().join(" … ");
-            regions.push(Region { start: s, end: e, kind: Kind::Retake, text });
+    for (s, e, special) in pieces {
+        if let Some((kind, text)) = special {
+            regions.push(Region { start: s, end: e, kind, text });
             continue;
         }
         let is_fill = cuts.iter().any(|&(cs, ce)| cs < e && ce > s);
@@ -189,7 +217,7 @@ pub fn compute_cuts(duration: f64, speech: &[Interval], words: Option<&[Word]>, 
         regions.push(Region { start: s, end: e, kind: if is_fill { Kind::Filler } else { Kind::Silence }, text });
     }
     regions.sort_by(|a, b| a.start.partial_cmp(&b.start).unwrap_or(std::cmp::Ordering::Equal));
-    CutResult { duration, keep, regions, fillers, retakes }
+    CutResult { duration, keep, regions, fillers, retakes, breaths }
 }
 
 /// Aligne les segments sur les images de la vidéo : [début, fin) en numéros d'image.

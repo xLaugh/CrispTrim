@@ -2,7 +2,7 @@
 
 use super::jobs::{JobRef, Stage};
 use super::panels::{dashed_rect, elide, hline, in_rect};
-use super::theme::{self, bfont, font, rgba, stroke, Btn, ACCENT, ACCENT2, BORDER, BORDER2, FAINT, FILLER, MUTED, PANEL, PANEL2, PANEL3, RETAKE, TEXT};
+use super::theme::{self, bfont, font, rgba, stroke, Btn, ACCENT, ACCENT2, BORDER, BORDER2, FAINT, FILLER, MUTED, PANEL, PANEL2, PANEL3, RETAKE, BREATH, TEXT};
 use super::timeline::fmt;
 use super::{App, CutFilter, Modal, Tab};
 use crate::engine::cutter::{to_frames, Kind};
@@ -149,6 +149,27 @@ fn settings_tab(app: &mut App, ui: &mut Ui) {
         changed |= theme::switch(ui, &mut app.edit.cut_noises, "Couper les bruits de bouche", TEXT, font(13.5), w);
         ui.add_space(12.0);
         changed |= theme::switch(ui, &mut app.edit.cut_retakes, "Couper les reprises (phrase ratée puis recommencée)", TEXT, font(13.5), w);
+        ui.add_space(12.0);
+        ui.horizontal(|ui| {
+            use super::jobs::BreathMode;
+            ui.label(RichText::new("Respirations").size(13.5).color(TEXT));
+            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                let label = |m: BreathMode| match m {
+                    BreathMode::Cut => "couper",
+                    BreathMode::Soften => "atténuer (.mp4)",
+                    BreathMode::Keep => "garder",
+                };
+                let before = app.edit.breaths;
+                egui::ComboBox::from_id_salt("breaths").selected_text(RichText::new(label(before)).size(12.5)).width(130.0).show_ui(ui, |ui| {
+                    for m in [BreathMode::Cut, BreathMode::Soften, BreathMode::Keep] {
+                        ui.selectable_value(&mut app.edit.breaths, m, label(m));
+                    }
+                });
+                changed |= app.edit.breaths != before;
+            });
+        });
+        ui.add_space(10.0);
+        changed |= theme::switch(ui, &mut app.edit.declick, "Atténuer les claquements de bouche (vidéo .mp4)", TEXT, font(13.5), w);
         ui.add_space(10.0);
         let device = if crate::engine::whisper::gpu_available() { "sur ta carte graphique" } else { "sur ton processeur" };
         ui.add(egui::Label::new(RichText::new(format!("Détectés par CrisperWhisper, en local {device}.")).size(11.5).color(FAINT)).wrap());
@@ -195,12 +216,14 @@ fn cuts_tab(app: &mut App, ui: &mut Ui) {
                 CutFilter::All => "Toutes",
                 CutFilter::Filler => "Hésitations",
                 CutFilter::Retake => "Reprises",
+                CutFilter::Breath => "Respirations",
                 CutFilter::Silence => "Silences",
             };
             egui::ComboBox::from_id_salt("cuts-filter").selected_text(RichText::new(label).size(12.0)).width(96.0).show_ui(ui, |ui| {
                 ui.selectable_value(&mut app.filter, CutFilter::All, "Toutes");
                 ui.selectable_value(&mut app.filter, CutFilter::Filler, "Hésitations");
                 ui.selectable_value(&mut app.filter, CutFilter::Retake, "Reprises");
+                ui.selectable_value(&mut app.filter, CutFilter::Breath, "Respirations");
                 ui.selectable_value(&mut app.filter, CutFilter::Silence, "Silences");
             });
         });
@@ -214,6 +237,7 @@ fn cuts_tab(app: &mut App, ui: &mut Ui) {
         match app.filter {
             CutFilter::Filler if c.kind != Kind::Filler => continue,
             CutFilter::Retake if c.kind != Kind::Retake => continue,
+            CutFilter::Breath if c.kind != Kind::Breath => continue,
             CutFilter::Silence if c.kind != Kind::Silence => continue,
             _ => {}
         }
@@ -238,6 +262,7 @@ fn cuts_tab(app: &mut App, ui: &mut Ui) {
         let (label, color) = match c.kind {
             Kind::Filler => ("Hésitation", FILLER),
             Kind::Retake => ("Reprise", RETAKE),
+            Kind::Breath => ("Respiration", BREATH),
             _ => ("Silence", Color32::from_rgb(0x7a, 0x81, 0x91)),
         };
         p.rect_filled(Rect::from_min_size(Pos2::new(x, r.top() + 13.0), Vec2::splat(10.0)), CornerRadius::same(3), color.gamma_multiply(a));
@@ -568,8 +593,12 @@ pub fn run_export(job: &JobRef, formats: &[&str], keep: &[(f64, f64)]) -> Result
         j.export.state = "rendu".into();
         let mp4 = stem("mp4");
         let job2 = job.clone();
+        let fx = crate::engine::export::AudioFx {
+            soften: if j.settings.breaths == super::jobs::BreathMode::Soften { j.breaths.clone() } else { Vec::new() },
+            declick: j.settings.declick,
+        };
         std::thread::spawn(move || {
-            let res = render_mp4(&info, &frames, &mp4);
+            let res = render_mp4(&info, &frames, &mp4, &fx);
             let mut j = job2.lock().unwrap();
             match res {
                 Ok(()) => {

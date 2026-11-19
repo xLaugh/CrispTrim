@@ -33,6 +33,8 @@ hésitations (transcriptions CrisperWhisper déjà faites) :
   --language CODE          code langue (défaut : fr)
   --keep-noises            garder les bruits de bouche ([yawn], [cough]…)
   --keep-retakes           garder les reprises (phrase ratée puis recommencée)
+  --breaths MODE           respirations : cut (couper, défaut), soften (atténuer dans le .mp4), keep
+  --no-declick             pas de filtre anti-claquements de bouche dans le .mp4
   --extra-filler MOT       mot supplémentaire à couper (répétable)
   --version                affiche la version";
 
@@ -42,6 +44,8 @@ pub fn main(args: Vec<String>) -> i32 {
     let mut export = "fcpxml,premiere,json".to_string();
     let mut sil = SilenceParams::default();
     let mut cut = CutParams::default();
+    let mut breath_mode = "cut".to_string();
+    let mut declick = true;
     let mut no_fillers = false;
     let mut model = crate::engine::transcribe::default_model().to_string();
     let mut language = "fr".to_string();
@@ -92,6 +96,8 @@ pub fn main(args: Vec<String>) -> i32 {
             "--language" => language = value!("--language"),
             "--keep-noises" => cut.cut_noises = false,
             "--keep-retakes" => cut.cut_retakes = false,
+            "--breaths" => breath_mode = value!("--breaths"),
+            "--no-declick" => declick = false,
             "--extra-filler" => {
                 extra.insert(value!("--extra-filler").to_lowercase());
             }
@@ -194,6 +200,18 @@ pub fn main(args: Vec<String>) -> i32 {
             }
         }
 
+        // respirations entre les mots : coupées, atténuées dans le MP4, ou gardées
+        let breaths = match &words {
+            Some(w) if breath_mode != "keep" => {
+                crate::engine::breaths::detect(&frame_db(&audio, SAMPLE_RATE), &crate::engine::breaths::voice_frames(&audio, SAMPLE_RATE), w, thr)
+            }
+            _ => Vec::new(),
+        };
+        let mut cut = cut.clone();
+        if breath_mode == "cut" {
+            cut.breaths = breaths.clone();
+        }
+        let mp4_fx = crate::engine::export::AudioFx { soften: if breath_mode == "soften" { breaths } else { Vec::new() }, declick };
         let result = compute_cuts(info.duration, &speech, words.as_deref(), &cut);
         let frames = to_frames(&result.keep, info.fps, info.total_frames());
         if frames.is_empty() {
@@ -238,14 +256,14 @@ pub fn main(args: Vec<String>) -> i32 {
         }
         if has("mp4") {
             println!("  rendu MP4…");
-            if let Err(e) = render_mp4(&info, &frames, &stem("mp4")) {
+            if let Err(e) = render_mp4(&info, &frames, &stem("mp4"), &mp4_fx) {
                 eprintln!("  {e}");
             }
         }
         let s = result.stats();
         println!(
-            "  ✓ {:.1} s → {:.1} s  (−{} %, {} segments, {} hésitations/bruits, {} reprises)  en {:.1} s",
-            s.duration, s.kept, s.removed_pct, s.segments, s.fillers, s.retakes, t0.elapsed().as_secs_f64()
+            "  ✓ {:.1} s → {:.1} s  (−{} %, {} segments, {} hésitations/bruits, {} reprises, {} respirations)  en {:.1} s",
+            s.duration, s.kept, s.removed_pct, s.segments, s.fillers, s.retakes, s.breaths, t0.elapsed().as_secs_f64()
         );
     }
     0

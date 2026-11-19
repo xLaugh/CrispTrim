@@ -1,5 +1,6 @@
 //! Moteur de CrispTrim : analyse, coupes, exports. Sans interface.
 
+pub mod breaths;
 pub mod cutter;
 pub mod export;
 pub mod fillers;

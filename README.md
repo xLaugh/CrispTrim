@@ -21,6 +21,9 @@ L'ancienne version Python reste disponible sur la branche [`python-old`](https:/
 - **Reprises** : quand tu rates le début d'une phrase et que tu recommences (« Donc la première c'est pour…
   Donc la première permet de… »), ou que tu bégaies (« on va on va »), la tentative ratée est coupée et la
   dernière gardée. Les répétitions voulues (« très très », « et vous allez copier, et vous allez coller ») restent.
+- **Respirations et bruits de bouche** : les respirations entre les mots (souffle sans voix) sont repérées dans
+  le son, puis coupées, ou seulement atténuées (−20 dB) dans la vidéo montée pour garder un rythme naturel.
+  Un filtre anti-claquements de bouche nettoie aussi le son de la vidéo montée.
 - **Aperçu monté** : la lecture saute les coupes. Chaque coupe s'écoute et se garde ou se recoupe d'un clic.
 - **Exports**, créés à côté du rush (identiques à ceux de la version Python) :
 
@@ -66,7 +69,7 @@ CrispTrim.exe rush.mp4 --no-fillers
 ```
 
 Réglages utiles : `--min-silence 0.5` (s), `--margin 0.15` (s), `--threshold-db -40` (sinon automatique),
-`--extra-filler ben` (couper aussi ce mot), `--keep-noises` (garder bâillements, toux, souffles), `--keep-retakes` (garder les reprises). `--help` pour tout voir.
+`--extra-filler ben` (couper aussi ce mot), `--keep-noises` (garder bâillements, toux, souffles), `--keep-retakes` (garder les reprises), `--breaths cut|soften|keep` (respirations), `--no-declick`. `--help` pour tout voir.
 
 ## Développement
 
@@ -85,6 +88,7 @@ cargo run --release
 | `src/engine/silence.rs` | zones sonores par énergie, seuil automatique |
 | `src/engine/transcribe.rs` | transcriptions : cache, sinon CrisperWhisper en Rust |
 | `src/engine/whisper/` | CrisperWhisper 2.0 en Rust : spectrogramme, modèle (candle), Viterbi mot à mot, fenêtres de 30 s |
+| `src/engine/breaths.rs` | respirations entre les mots (voix, souffle, niveau) |
 | `src/engine/retakes.rs` | reprises : phrase ratée puis recommencée, bégaiements |
 | `src/engine/fillers.rs` | reconnaissance des hésitations françaises |
 | `src/engine/cutter.rs` | segments gardés : parole + marges − hésitations, alignés sur les images |

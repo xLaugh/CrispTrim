@@ -1,7 +1,7 @@
 //! Barre du haut, liste des rushes, centre (lecteur + timeline).
 
 use super::jobs::Stage;
-use super::theme::{self, bfont, font, rgba, stroke, Btn, ACCENT, ACCENT2, BORDER, BORDER2, FAINT, FILLER, MUTED, PANEL, PANEL2, PANEL3, RETAKE, TEXT};
+use super::theme::{self, bfont, font, rgba, stroke, Btn, ACCENT, ACCENT2, BORDER, BORDER2, FAINT, FILLER, MUTED, PANEL, PANEL2, PANEL3, RETAKE, BREATH, TEXT};
 use super::timeline::{self, fmt};
 use super::{App, Modal};
 use crate::engine::transcribe::MODELS;
@@ -481,24 +481,24 @@ fn transport(app: &mut App, ui: &mut Ui) {
                 app.tl.zoom(1.0 / 1.6, w / 2.0, d);
             }
             // la légende seulement si elle tient sans chevaucher « Aperçu monté »
-            if ui.available_width() > legend_width(ui) + 12.0 {
-                ui.add_space(8.0);
-                legend(ui);
-            }
+            ui.add_space(8.0);
+            legend(ui);
         });
     });
 }
 
-const LEGEND: [(&str, u8); 3] = [("Reprise", 3), ("Hésitation", 2), ("Silence", 1)];
+// par ordre d'importance : si la place manque, la fin de la liste disparaît
+const LEGEND: [(&str, u8); 4] = [("Silence", 1), ("Hésitation", 2), ("Reprise", 3), ("Respiration", 4)];
 
-fn legend_width(ui: &Ui) -> f32 {
-    LEGEND.iter().map(|(l, _)| theme::text_width(ui, l, font(11.5)) + 16.0 + 4.0 + ui.spacing().item_spacing.x).sum()
-}
 
 fn legend(ui: &mut Ui) {
     // de droite à gauche
+    // autant d'éléments que la place le permet, sans chevaucher « Aperçu monté »
     for (label, kind) in LEGEND {
         let w = theme::text_width(ui, label, font(11.5)) + 16.0;
+        if ui.available_width() < w + 16.0 {
+            break;
+        }
         let (r, _) = ui.allocate_exact_size(Vec2::new(w, 16.0), Sense::hover());
         let p = ui.painter();
         let sw = Rect::from_min_size(Pos2::new(r.left(), r.center().y - 5.0), Vec2::splat(10.0));
@@ -514,8 +514,11 @@ fn legend(ui: &mut Ui) {
             2 => {
                 p.rect_filled(sw, CornerRadius::same(3), FILLER);
             }
-            _ => {
+            3 => {
                 p.rect_filled(sw, CornerRadius::same(3), RETAKE);
+            }
+            _ => {
+                p.rect_filled(sw, CornerRadius::same(3), BREATH);
             }
         }
         p.text(Pos2::new(sw.right() + 5.0, r.center().y), Align2::LEFT_CENTER, label, font(11.5), MUTED);

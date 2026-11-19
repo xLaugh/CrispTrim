@@ -1,5 +1,6 @@
 //! Les rushes : analyse en tâche de fond (un fichier à la fois), recalcul instantané des coupes.
 
+use crate::engine::breaths::{detect as detect_breaths, voice_frames, VoiceFrames};
 use crate::engine::cutter::{compute_cuts, CutParams, Kind, Region, Stats};
 use crate::engine::media::{load_audio, load_playback_audio, probe, thumbnail, MediaInfo, SAMPLE_RATE};
 use crate::engine::silence::{detect_speech_db, frame_db, SilenceParams};
@@ -46,11 +47,33 @@ pub struct Settings {
     pub cut_fillers: bool,
     pub cut_noises: bool,
     pub cut_retakes: bool,
+    /// Respirations entre les mots : gardées, coupées, ou atténuées dans la vidéo montée.
+    pub breaths: BreathMode,
+    /// Filtre anti-claquements de bouche dans la vidéo montée.
+    pub declick: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BreathMode {
+    Keep,
+    Cut,
+    Soften,
 }
 
 impl Default for Settings {
     fn default() -> Self {
-        Settings { threshold_db: None, min_silence: 0.5, margin: 0.15, min_keep: 0.25, cut_silences: true, cut_fillers: true, cut_noises: true, cut_retakes: true }
+        Settings {
+            threshold_db: None,
+            min_silence: 0.5,
+            margin: 0.15,
+            min_keep: 0.25,
+            cut_silences: true,
+            cut_fillers: true,
+            cut_noises: true,
+            cut_retakes: true,
+            breaths: BreathMode::Cut,
+            declick: true,
+        }
     }
 }
 
@@ -70,6 +93,10 @@ pub struct Job {
     pub error: String,
     pub info: Option<MediaInfo>,
     pub db: Arc<Vec<f32>>,
+    /// Mesures de voix et de souffle (détection des respirations).
+    pub voice: Arc<VoiceFrames>,
+    /// Respirations détectées entre les mots (secondes de la source).
+    pub breaths: Vec<(f64, f64)>,
     pub words: Option<Vec<Word>>,
     pub words_source: Option<PathBuf>,
     pub threshold: f64,
@@ -115,7 +142,20 @@ pub fn recut(job: &mut Job) {
     if !s.cut_silences {
         speech = vec![(0.0, duration)];
     }
-    let params = CutParams { margin: s.margin, min_keep: s.min_keep, cut_fillers: s.cut_fillers, cut_noises: s.cut_noises, cut_retakes: s.cut_retakes, ..Default::default() };
+    let breaths = match (&job.words, s.breaths) {
+        (Some(w), BreathMode::Cut | BreathMode::Soften) => detect_breaths(&job.db, &job.voice, w, thr),
+        _ => Vec::new(),
+    };
+    let params = CutParams {
+        margin: s.margin,
+        min_keep: s.min_keep,
+        cut_fillers: s.cut_fillers,
+        cut_noises: s.cut_noises,
+        cut_retakes: s.cut_retakes,
+        breaths: if s.breaths == BreathMode::Cut { breaths.clone() } else { Vec::new() },
+        ..Default::default()
+    };
+    job.breaths = breaths;
     let res = compute_cuts(duration, &speech, job.words.as_deref(), &params);
     job.threshold = thr;
     job.stats = res.stats();
@@ -167,6 +207,8 @@ impl Queue {
             error: String::new(),
             info: None,
             db: Arc::new(Vec::new()),
+            voice: Arc::new(VoiceFrames::default()),
+            breaths: Vec::new(),
             words: None,
             words_source: None,
             threshold: 0.0,
@@ -211,11 +253,13 @@ fn process(job: &JobRef, config: &Arc<Mutex<Config>>, wake: &dyn Fn()) -> Result
     let thumb = thumbnail(&info);
     let audio = load_audio(&info.path, SAMPLE_RATE)?;
     let db = frame_db(&audio, SAMPLE_RATE);
+    let voice = voice_frames(&audio, SAMPLE_RATE);
     drop(audio);
     {
         let mut j = job.lock().unwrap();
         j.thumb = thumb;
         j.db = Arc::new(db);
+        j.voice = Arc::new(voice);
         j.stage = Stage::Preview;
         recut(&mut j); // premier résultat (silences seuls) visible tout de suite
     }

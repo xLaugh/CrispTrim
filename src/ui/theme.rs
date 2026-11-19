@@ -19,6 +19,8 @@ pub const ACCENT2: Color32 = Color32::from_rgb(0xb0, 0xa5, 0xff);
 pub const FILLER: Color32 = Color32::from_rgb(0xff, 0x9d, 0x42);
 /// Reprises (phrase ratée puis recommencée).
 pub const RETAKE: Color32 = Color32::from_rgb(0xff, 0x5f, 0xa2);
+/// Respirations entre les mots.
+pub const BREATH: Color32 = Color32::from_rgb(0x5e, 0xc8, 0xff);
 pub const DANGER: Color32 = Color32::from_rgb(0xff, 0x5d, 0x6c);
 pub const OK: Color32 = Color32::from_rgb(0x3d, 0xdc, 0x97);
 pub const GRAD: [Color32; 3] =

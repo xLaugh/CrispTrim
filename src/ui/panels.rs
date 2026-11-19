@@ -560,8 +560,12 @@ fn timeline_area(app: &mut App, ui: &mut Ui, r: Rect) {
         if resp.hovered() {
             let (zoom, scroll, hover) = ui.input(|i| (i.zoom_delta(), i.smooth_scroll_delta, i.pointer.hover_pos()));
             if zoom != 1.0 {
+                // Ctrl + molette : zoom progressif (egui étale un cran sur plusieurs images),
+                // adouci et plafonné par image, centré sur la souris.
                 let ax = hover.map(x).unwrap_or(r.width() / 2.0);
-                app.tl.zoom(if zoom > 1.0 { 1.25 } else { 0.8 }, ax, d);
+                let f = (zoom as f64).powf(0.6).clamp(0.9, 1.1);
+                app.tl.zoom(f, ax, d);
+                ui.ctx().request_repaint();
             } else if scroll.x != 0.0 || scroll.y != 0.0 {
                 app.tl.start -= (scroll.y + scroll.x) as f64 / app.tl.pps;
                 app.tl.clamp(d);

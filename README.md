@@ -1,7 +1,7 @@
 # CrispTrim
 
 Coupe automatiquement les **silences** et les **hésitations** (« euh », « hum »…) de tes rushes,
-puis exporte une timeline pour **DaVinci Resolve**, **Final Cut Pro**, **Premiere Pro**, **Vegas Pro**, ou un MP4 monté.
+puis exporte une timeline pour **DaVinci Resolve**, **Final Cut Pro**, **Premiere Pro**, **Vegas Pro**, ou un MP4 monté, ou seulement l'audio monté (WAV, MP3, FLAC, M4A).
 Tout tourne en local.
 
 **Version 0.2 : CrispTrim est maintenant écrit en Rust** (fenêtre egui, son cpal, FFmpeg).
@@ -33,6 +33,7 @@ L'ancienne version Python reste disponible sur la branche [`python-old`](https:/
   | Premiere Pro | `.xml` | *Fichier > Importer* |
   | Vegas Pro | `.vegas.txt` | *Fichier > Importer > Fichier texte EDL* |
   | Vidéo montée | `.mp4` | NVENC si disponible |
+  | Audio monté | `.wav` `.mp3` `.flac` `.m4a` | mêmes coupes, sans l'image (WAV 16 bits, MP3 320 kbit/s, FLAC, AAC 256 kbit/s) |
   | Sous-titres / texte | `.srt` / `.txt` | recalés sur le montage, sans les hésitations |
 
 ## Installation (Windows)
@@ -66,6 +67,7 @@ Le même programme, avec des fichiers en arguments :
 ```bash
 CrispTrim.exe rush.mp4
 CrispTrim.exe rush1.mp4 rush2.mov --export fcpxml,premiere,vegas,mp4,srt -o montage/
+CrispTrim.exe podcast.wav --export wav,mp3
 CrispTrim.exe rush.mp4 --no-fillers
 ```
 
@@ -93,7 +95,7 @@ cargo run --release
 | `src/engine/retakes.rs` | reprises : phrase ratée puis recommencée, bégaiements |
 | `src/engine/fillers.rs` | reconnaissance des hésitations françaises |
 | `src/engine/cutter.rs` | segments gardés : parole + marges − hésitations, alignés sur les images |
-| `src/engine/export.rs` | FCPXML 1.9, XML Premiere (xmeml v4), EDL texte Vegas Pro, MP4, JSON |
+| `src/engine/export.rs` | FCPXML 1.9, XML Premiere (xmeml v4), EDL texte Vegas Pro, MP4, audio monté, JSON |
 | `src/engine/text.rs` | texte et sous-titres recalés sur le montage |
 | `src/engine/gpu_worker.rs` | module carte graphique (`crisptrim-gpu.exe`, compilé avec `--features cuda`) |
 | `src/engine/updates.rs` | vérification des nouvelles versions (Releases GitHub) |

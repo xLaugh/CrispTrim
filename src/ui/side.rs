@@ -6,7 +6,7 @@ use super::theme::{self, bfont, font, rgba, stroke, Btn, ACCENT, ACCENT2, BORDER
 use super::timeline::fmt;
 use super::{App, CutFilter, Modal, Tab};
 use crate::engine::cutter::{to_frames, Kind};
-use crate::engine::export::{render_mp4, write_fcpxml, write_premiere_xml, write_vegas_edl};
+use crate::engine::export::{render_audio, render_mp4, AudioFormat, write_fcpxml, write_premiere_xml, write_vegas_edl};
 use crate::engine::intervals::merge;
 use crate::engine::text::{write_srt, write_txt};
 use crate::engine::updates::{REPO_URL, VERSION};
@@ -502,6 +502,35 @@ fn export_footer(app: &mut App, ui: &mut Ui, compact: bool) {
     }
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 6.0;
+        let cw = 78.0;
+        let bw = w - 6.0 - cw;
+        let fmt = app.audio_fmt;
+        let ext = format!(".{}", fmt.ext());
+        let resp = theme::button(ui, Vec2::new(bw, 34.0), Btn::Normal, "Audio monté", &ext, ok, font(13.5));
+        if resp.on_hover_text("Seulement le son, avec les mêmes coupes que la vidéo").clicked() {
+            clicked = Some(fmt.ext());
+        }
+        let pick = theme::button(ui, Vec2::new(cw, 34.0), Btn::Normal, &fmt.ext().to_uppercase(), "▾", ok, font(13.0)).on_hover_text("Format de l'audio");
+        let pid = egui::Id::new("audio-fmt-menu");
+        if pick.clicked() {
+            ui.memory_mut(|m| m.toggle_popup(pid));
+        }
+        egui::popup_below_widget(ui, pid, &pick, egui::PopupCloseBehavior::CloseOnClick, |ui| {
+            ui.set_min_width(170.0);
+            for f in AudioFormat::ALL {
+                let tip = match f {
+                    AudioFormat::Wav => "sans perte",
+                    AudioFormat::Mp3 => "320 kbit/s",
+                    AudioFormat::Flac => "sans perte, plus léger",
+                    AudioFormat::M4a => "AAC 256 kbit/s",
+                };
+                let text = RichText::new(format!("{}   {tip}", f.ext().to_uppercase())).size(12.5);
+                ui.selectable_value(&mut app.audio_fmt, f, text);
+            }
+        });
+    });
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = 6.0;
         let bw = (w - 6.0) / 2.0;
         let tip = "Active « Couper les hésitations » pour transcrire";
         for (label, ext, id) in [("Sous-titres", ".srt", "srt"), ("Texte", ".txt", "txt")] {
@@ -520,7 +549,8 @@ fn export_footer(app: &mut App, ui: &mut Ui, compact: bool) {
     let Some(v) = &app.view else { return };
     let ex = &v.export;
     if ex.state == "rendu" {
-        ui.label(RichText::new("Rendu de la vidéo montée…").size(12.0).color(MUTED));
+        let what = if ex.rendering == "mp4" { "de la vidéo montée".to_string() } else { format!("de l'audio monté (.{})", ex.rendering) };
+        ui.label(RichText::new(format!("Rendu {what}…")).size(12.0).color(MUTED));
     } else if ex.state == "erreur" {
         ui.label(RichText::new(format!("Erreur : {}", ex.error)).size(12.0).color(theme::DANGER));
     } else if !ex.files.is_empty() {
@@ -593,20 +623,28 @@ pub fn run_export(job: &JobRef, formats: &[&str], keep: &[(f64, f64)]) -> Result
     j.export.files = all;
     j.export.state = "fait".into();
     j.export.error.clear();
-    if has("mp4") {
+    let audio = formats.iter().find_map(|f| AudioFormat::from_ext(f));
+    let target = if has("mp4") { Some((stem("mp4"), None)) } else { audio.map(|f| (stem(f.ext()), Some(f))) };
+    if let Some((out, audio)) = target {
+        if audio.is_some() && !info.has_audio {
+            return Err("Ce fichier n'a pas de piste audio.".into());
+        }
         j.export.state = "rendu".into();
-        let mp4 = stem("mp4");
+        j.export.rendering = audio.map(|f| f.ext().to_string()).unwrap_or_else(|| "mp4".into());
         let job2 = job.clone();
         let fx = crate::engine::export::AudioFx {
             soften: if j.settings.breaths == super::jobs::BreathMode::Soften { j.breaths.clone() } else { Vec::new() },
             declick: j.settings.declick,
         };
         std::thread::spawn(move || {
-            let res = render_mp4(&info, &frames, &mp4, &fx);
+            let res = match audio {
+                Some(f) => render_audio(&info, &frames, &out, &fx, f),
+                None => render_mp4(&info, &frames, &out, &fx),
+            };
             let mut j = job2.lock().unwrap();
             match res {
                 Ok(()) => {
-                    let m = mp4.display().to_string();
+                    let m = out.display().to_string();
                     j.export.files.retain(|f| *f != m);
                     j.export.files.push(m);
                     j.export.state = "fait".into();

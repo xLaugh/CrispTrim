@@ -392,8 +392,56 @@ pub struct AudioFx {
     pub declick: bool,
 }
 
+/// Formats de l'audio monté.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AudioFormat {
+    Wav,
+    Mp3,
+    Flac,
+    M4a,
+}
+
+impl AudioFormat {
+    pub const ALL: [AudioFormat; 4] = [AudioFormat::Wav, AudioFormat::Mp3, AudioFormat::Flac, AudioFormat::M4a];
+
+    pub fn ext(self) -> &'static str {
+        match self {
+            AudioFormat::Wav => "wav",
+            AudioFormat::Mp3 => "mp3",
+            AudioFormat::Flac => "flac",
+            AudioFormat::M4a => "m4a",
+        }
+    }
+
+    pub fn from_ext(s: &str) -> Option<AudioFormat> {
+        AudioFormat::ALL.into_iter().find(|f| f.ext() == s.trim_start_matches('.').to_ascii_lowercase())
+    }
+
+    fn codec(self) -> &'static [&'static str] {
+        match self {
+            AudioFormat::Wav => &["-c:a", "pcm_s16le"],
+            AudioFormat::Mp3 => &["-c:a", "libmp3lame", "-b:a", "320k"],
+            AudioFormat::Flac => &["-c:a", "flac"],
+            AudioFormat::M4a => &["-c:a", "aac", "-b:a", "256k", "-movflags", "+faststart"],
+        }
+    }
+}
+
 pub fn render_mp4(info: &MediaInfo, frames: &Frames, out: &Path, fx: &AudioFx) -> Result<(), String> {
+    render(info, frames, out, fx, None)
+}
+
+/// Rend seulement le son monté (mêmes coupes et retouches que la vidéo).
+pub fn render_audio(info: &MediaInfo, frames: &Frames, out: &Path, fx: &AudioFx, fmt: AudioFormat) -> Result<(), String> {
+    if !info.has_audio {
+        return Err("Ce fichier n'a pas de piste audio.".into());
+    }
+    render(info, frames, out, fx, Some(fmt))
+}
+
+fn render(info: &MediaInfo, frames: &Frames, out: &Path, fx: &AudioFx, audio_only: Option<AudioFormat>) -> Result<(), String> {
     let fps = info.fps;
+    let has_video = info.has_video && audio_only.is_none();
     let (mut parts, mut labels) = (String::new(), String::new());
     // son retouché une fois (temps de la source), puis réparti entre les segments
     let mut audio_in = "[0:a]".to_string();
@@ -408,7 +456,7 @@ pub fn render_mp4(info: &MediaInfo, frames: &Frames, out: &Path, fx: &AudioFx) -
     }
     for (i, &(a, b)) in frames.iter().enumerate() {
         let (s, e) = (fps.secs(a), fps.secs(b));
-        if info.has_video {
+        if has_video {
             parts.push_str(&format!("[0:v]trim=start={s:.6}:end={e:.6},setpts=PTS-STARTPTS[v{i}];"));
             labels.push_str(&format!("[v{i}]"));
         }
@@ -418,7 +466,7 @@ pub fn render_mp4(info: &MediaInfo, frames: &Frames, out: &Path, fx: &AudioFx) -
             labels.push_str(&format!("[a{i}]"));
         }
     }
-    let (v, a) = (info.has_video as u8, info.has_audio as u8);
+    let (v, a) = (has_video as u8, info.has_audio as u8);
     let declick = a == 1 && fx.declick;
     let outs = format!("{}{}", if v == 1 { "[outv]" } else { "" }, if a == 1 { if declick { "[araw]" } else { "[outa]" } } else { "" });
     let mut graph = format!("{parts}{labels}concat=n={}:v={v}:a={a}{outs}", frames.len());
@@ -437,10 +485,18 @@ pub fn render_mp4(info: &MediaInfo, frames: &Frames, out: &Path, fx: &AudioFx) -
         if v == 1 {
             c.args(["-map", "[outv]"]).args(encoder).args(["-pix_fmt", "yuv420p", "-r", &format!("{}/{}", fps.num, fps.den)]);
         }
-        if a == 1 {
-            c.args(["-map", "[outa]", "-c:a", "aac", "-b:a", "192k"]);
+        match audio_only {
+            Some(f) => {
+                c.args(["-map", "[outa]", "-vn"]).args(f.codec());
+            }
+            None => {
+                if a == 1 {
+                    c.args(["-map", "[outa]", "-c:a", "aac", "-b:a", "192k"]);
+                }
+                c.args(["-movflags", "+faststart"]);
+            }
         }
-        c.args(["-movflags", "+faststart"]).arg(out).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
+        c.arg(out).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
         c.status().map(|s| s.success()).unwrap_or(false)
     };
 
@@ -450,7 +506,11 @@ pub fn render_mp4(info: &MediaInfo, frames: &Frames, out: &Path, fx: &AudioFx) -
         ok = run(&x264()); // encodeur matériel indisponible
     }
     let _ = std::fs::remove_file(&script);
-    if ok { Ok(()) } else { Err("ffmpeg n'a pas pu rendre la vidéo montée.".into()) }
+    match (ok, audio_only) {
+        (true, _) => Ok(()),
+        (false, None) => Err("ffmpeg n'a pas pu rendre la vidéo montée.".into()),
+        (false, Some(f)) => Err(format!("ffmpeg n'a pas pu rendre l'audio monté ({}).", f.ext())),
+    }
 }
 
 // --------------------------------------------------------------------------- JSON

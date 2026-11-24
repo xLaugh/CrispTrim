@@ -83,6 +83,8 @@ pub struct ExportState {
     pub state: String,
     pub files: Vec<String>,
     pub error: String,
+    /// Ce qui est en cours de rendu : "mp4" ou l'extension audio.
+    pub rendering: String,
 }
 
 pub struct Job {

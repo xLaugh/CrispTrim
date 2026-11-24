@@ -1,7 +1,7 @@
 //! Ligne de commande : crisptrim rush1.mp4 rush2.mov -o sortie/
 
 use crate::engine::cutter::{compute_cuts, to_frames, CutParams};
-use crate::engine::export::{render_mp4, write_fcpxml, write_json, write_premiere_xml, write_vegas_edl};
+use crate::engine::export::{render_audio, render_mp4, AudioFormat, write_fcpxml, write_json, write_premiere_xml, write_vegas_edl};
 use crate::engine::media::{load_audio, probe, require_ffmpeg, SAMPLE_RATE};
 use crate::engine::silence::{detect_speech_db, frame_db, SilenceParams};
 use crate::engine::text::{write_srt, write_txt};
@@ -11,7 +11,7 @@ use std::collections::HashSet;
 use std::path::PathBuf;
 use std::time::Instant;
 
-const EXPORTS: [&str; 7] = ["fcpxml", "premiere", "vegas", "mp4", "json", "txt", "srt"];
+const EXPORTS: [&str; 11] = ["fcpxml", "premiere", "vegas", "mp4", "wav", "mp3", "flac", "m4a", "json", "txt", "srt"];
 
 const HELP: &str = "usage : crisptrim [fichiers…] [options]
 
@@ -19,7 +19,8 @@ Coupe les silences et les hésitations (« euh ») de tes rushes, puis exporte u
 Sans fichier, ouvre la fenêtre.
 
   -o, --output DOSSIER     dossier de sortie (défaut : à côté du fichier)
-  --export LISTE           parmi fcpxml,premiere,vegas,mp4,json,txt,srt (défaut : fcpxml,premiere,json)
+  --export LISTE           parmi fcpxml,premiere,vegas,mp4,wav,mp3,flac,m4a,json,txt,srt
+                           (wav… = audio monté seul ; défaut : fcpxml,premiere,json)
 
 silences :
   --threshold-db DB        seuil de silence en dBFS (défaut : automatique)
@@ -33,8 +34,8 @@ hésitations (transcriptions CrisperWhisper déjà faites) :
   --language CODE          code langue (défaut : fr)
   --keep-noises            garder les bruits de bouche ([yawn], [cough]…)
   --keep-retakes           garder les reprises (phrase ratée puis recommencée)
-  --breaths MODE           respirations : cut (couper, défaut), soften (atténuer dans le .mp4), keep
-  --no-declick             pas de filtre anti-claquements de bouche dans le .mp4
+  --breaths MODE           respirations : cut (couper, défaut), soften (atténuer dans le .mp4 / l'audio), keep
+  --no-declick             pas de filtre anti-claquements de bouche dans le .mp4 / l'audio
   --extra-filler MOT       mot supplémentaire à couper (répétable)
   --version                affiche la version";
 
@@ -258,6 +259,14 @@ pub fn main(args: Vec<String>) -> i32 {
             println!("  rendu MP4…");
             if let Err(e) = render_mp4(&info, &frames, &stem("mp4"), &mp4_fx) {
                 eprintln!("  {e}");
+            }
+        }
+        for f in AudioFormat::ALL {
+            if has(f.ext()) {
+                println!("  rendu audio .{}…", f.ext());
+                if let Err(e) = render_audio(&info, &frames, &stem(f.ext()), &mp4_fx, f) {
+                    eprintln!("  {e}");
+                }
             }
         }
         let s = result.stats();

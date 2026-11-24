@@ -68,6 +68,8 @@ pub struct App {
     repaint: egui::Context,
     /// Zone en cours de sélection sur la timeline (Maj + glisser) : début, fin.
     pub tl_sel: Option<(f64, f64)>,
+    /// Format choisi pour « Audio monté ».
+    pub audio_fmt: crate::engine::export::AudioFormat,
     config: Arc<Mutex<Config>>,
     queue: Queue,
     jobs: Vec<JobRef>,
@@ -132,6 +134,7 @@ impl App {
         let mut app = App {
             repaint: cc.egui_ctx.clone(),
             tl_sel: None,
+            audio_fmt: crate::engine::export::AudioFormat::Wav,
             config,
             queue,
             jobs: Vec::new(),

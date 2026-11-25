@@ -1,5 +1,5 @@
 ﻿; Installateur de CrispTrim (Inno Setup 6) : installation pour l'utilisateur, sans droits administrateur.
-;   iscc /DAppVersion=0.3.1 /DExe=dist\CrispTrim.exe installer\crisptrim.iss   →   dist\CrispTrim-Setup.exe
+;   iscc /DAppVersion=0.3.2 /DExe=dist\CrispTrim.exe installer\crisptrim.iss   →   dist\CrispTrim-Setup.exe
 ; Mise à jour en un clic : l'appli lance  CrispTrim-Setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART
 ; (elle se ferme avant ; l'installateur la relance à la fin).
 

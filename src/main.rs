@@ -46,7 +46,7 @@ fn main() {
     if args.first().map(String::as_str) == Some("--gpu-worker") {
         std::process::exit(engine::gpu_worker::worker_main());
     }
-    // Mise à jour sans fenêtre : crisptrim --update-to v0.3.1
+    // Mise à jour sans fenêtre : crisptrim --update-to v0.3.2
     if args.first().map(String::as_str) == Some("--update-to") {
         attach_console();
         let tag = args.get(1).cloned().unwrap_or_default();

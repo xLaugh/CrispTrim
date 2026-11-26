@@ -14,7 +14,7 @@ pub const MEDIA_EXT: [&str; 12] = ["mp4", "mov", "mkv", "mxf", "avi", "webm", "m
 /// par CrispTrim passe avant celui du système.
 pub fn tool(name: &str) -> Command {
     let bundled = crate::data_dir().join("bin").join(format!("{name}.exe"));
-    let program = if matches!(name, "ffmpeg" | "ffprobe") && bundled.is_file() { bundled } else { PathBuf::from(name) };
+    let program = if matches!(name, "ffmpeg" | "ffprobe") && bundled.is_file() { bundled } else { find_program(name) };
     #[allow(unused_mut)]
     let mut c = Command::new(program);
     #[cfg(windows)]
@@ -23,6 +23,42 @@ pub fn tool(name: &str) -> Command {
         c.creation_flags(0x0800_0000);
     }
     c
+}
+
+/// Cherche `name` dans le PATH et renvoie le vrai fichier quand c'est un lien symbolique.
+/// WinGet installe ffmpeg en liens (`%LOCALAPPDATA%\Microsoft\WinGet\Links\ffprobe.exe`), et Windows
+/// refuse parfois de les suivre au lancement (« point de montage non approuvé », erreur 448).
+fn find_program(name: &str) -> PathBuf {
+    static CACHE: std::sync::Mutex<Vec<(String, PathBuf)>> = std::sync::Mutex::new(Vec::new());
+    if let Some((_, p)) = CACHE.lock().unwrap().iter().find(|(n, _)| n == name) {
+        return p.clone();
+    }
+    let exe = if cfg!(windows) && Path::new(name).extension().is_none() { format!("{name}.exe") } else { name.to_string() };
+    let found = std::env::var_os("PATH")
+        .into_iter()
+        .flat_map(|p| std::env::split_paths(&p).collect::<Vec<_>>())
+        .map(|dir| dir.join(&exe))
+        .find(|p| p.symlink_metadata().is_ok())
+        .map(|p| real_path(&p))
+        .unwrap_or_else(|| PathBuf::from(name));
+    CACHE.lock().unwrap().push((name.to_string(), found.clone()));
+    found
+}
+
+/// Suit les liens symboliques nous-mêmes : lire un lien n'est pas le traverser.
+fn real_path(p: &Path) -> PathBuf {
+    let mut cur = p.to_path_buf();
+    for _ in 0..8 {
+        let is_link = cur.symlink_metadata().map(|m| m.file_type().is_symlink()).unwrap_or(false);
+        if !is_link {
+            break;
+        }
+        match std::fs::read_link(&cur) {
+            Ok(t) => cur = if t.is_absolute() { t } else { cur.parent().map(|d| d.join(&t)).unwrap_or(t) },
+            Err(_) => break,
+        }
+    }
+    cur
 }
 
 #[derive(Clone, Debug)]
@@ -165,4 +201,16 @@ pub fn frame_at(info: &MediaInfo, t: f64, width: u32) -> Option<(u32, u32, Vec<u
 /// Vignette prise à 10 % de la vidéo (au plus à 3 s du début).
 pub fn thumbnail(info: &MediaInfo) -> Option<(u32, u32, Vec<u8>)> {
     frame_at(info, (info.duration * 0.1).min(3.0), 240)
+}
+
+#[cfg(test)]
+mod program_tests {
+    #[test]
+    fn find_program_skips_links() {
+        let p = super::find_program("ffprobe");
+        println!("ffprobe -> {}", p.display());
+        if p.is_absolute() {
+            assert!(!p.symlink_metadata().unwrap().file_type().is_symlink());
+        }
+    }
 }

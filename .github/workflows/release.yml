@@ -56,7 +56,13 @@ jobs:
         run: |
           notes=""
           if [ -f "docs/release-$GITHUB_REF_NAME.md" ]; then notes="--notes-file docs/release-$GITHUB_REF_NAME.md"; else notes="--generate-notes"; fi
-          gh release create "$GITHUB_REF_NAME" dist/CrispTrim-Setup.exe dist/CrispTrim.exe --title "CrispTrim $GITHUB_REF_NAME" $notes --verify-tag
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            # tag déplacé sur une release déjà publiée : on remplace ses fichiers et ses notes
+            gh release upload "$GITHUB_REF_NAME" dist/CrispTrim-Setup.exe dist/CrispTrim.exe --clobber
+            if [ -f "docs/release-$GITHUB_REF_NAME.md" ]; then gh release edit "$GITHUB_REF_NAME" --notes-file "docs/release-$GITHUB_REF_NAME.md"; fi
+          else
+            gh release create "$GITHUB_REF_NAME" dist/CrispTrim-Setup.exe dist/CrispTrim.exe --title "CrispTrim $GITHUB_REF_NAME" $notes --verify-tag
+          fi
 
   # Module carte graphique : construit et joint à la release par l'action « Module GPU ».
   gpu-module:

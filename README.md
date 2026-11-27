@@ -18,7 +18,7 @@ L'ancienne version Python reste disponible sur la branche [`python-old`](https:/
   Sur un PC NVIDIA (RTX 30 ou plus récent), CrispTrim télécharge aussi une fois son module carte graphique
   (bibliothèques NVIDIA comprises, ~700 Mo) : environ 6 fois plus rapide que le temps réel ;
   les transcriptions déjà faites par la version Python sont reprises telles quelles.
-- **Reprises** : quand tu rates le début d'une phrase et que tu recommences (« Donc la première c'est pour…
+- **Reprises** (bêta) : quand tu rates le début d'une phrase et que tu recommences (« Donc la première c'est pour…
   Donc la première permet de… »), ou que tu bégaies (« on va on va »), la tentative ratée est coupée et la
   dernière gardée. Les répétitions voulues (« très très », « et vous allez copier, et vous allez coller ») restent.
 - **Respirations et bruits de bouche** : les respirations entre les mots (souffle sans voix) sont repérées dans
@@ -48,6 +48,30 @@ Les deux se mettent à jour en un clic (« Nouvelle version disponible » > *Met
 pas signé : au premier lancement, *Informations complémentaires > Exécuter quand même*.
 FFmpeg est nécessaire (`winget install ffmpeg`) ; si l'ancienne version de CrispTrim est installée, son FFmpeg
 est utilisé automatiquement.
+
+## Installation (Linux)
+
+Depuis la [dernière release](https://github.com/xLaugh/CrispTrim/releases/latest), pour un PC 64 bits (x86_64)
+avec une distribution de 2022 ou plus récente (glibc 2.35+) :
+
+- **`CrispTrim-x86_64.AppImage`** : toutes les distributions (Ubuntu, Fedora, Arch, openSUSE…).
+  `chmod +x CrispTrim-x86_64.AppImage` puis double-clic. Se met à jour en un clic.
+- **`crisptrim_X.Y.Z_amd64.deb`** : Debian, Ubuntu, Linux Mint, Pop!_OS… (`sudo apt install ./crisptrim_*.deb`,
+  ffmpeg est installé avec). Pour mettre à jour, installe le nouveau paquet.
+- **`CrispTrim-linux-x86_64`** : le programme seul, portable. Se met à jour en un clic.
+
+Il faut FFmpeg (`sudo apt install ffmpeg`, `sudo dnf install ffmpeg`, `sudo pacman -S ffmpeg`…), ainsi que GTK 3
+et ALSA, présents sur tous les bureaux courants. La transcription se fait sur le processeur.
+
+## Installation (macOS)
+
+**`CrispTrim-macOS.dmg`** depuis la [dernière release](https://github.com/xLaugh/CrispTrim/releases/latest) :
+ouvre-le et glisse CrispTrim dans *Applications*. Fonctionne sur les Mac Apple Silicon (M1 et suivants) et Intel,
+macOS 11 ou plus récent. Il faut FFmpeg : `brew install ffmpeg`.
+
+L'appli n'est pas signée par Apple : au premier lancement, **clic droit > Ouvrir**, puis *Ouvrir*. Si macOS
+indique qu'elle est endommagée : `xattr -dr com.apple.quarantine /Applications/CrispTrim.app`.
+Elle se met à jour en un clic.
 
 ## Utilisation
 

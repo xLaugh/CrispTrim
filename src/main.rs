@@ -19,9 +19,17 @@ pub fn data_dir() -> PathBuf {
             return dir;
         }
     }
-    let base = std::env::var_os("LOCALAPPDATA").map(PathBuf::from).unwrap_or_else(|| {
-        std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".cache")).unwrap_or_else(|| PathBuf::from("."))
-    });
+    let env = |k: &str| std::env::var_os(k).filter(|v| !v.is_empty()).map(PathBuf::from);
+    let home = env("HOME").unwrap_or_else(|| PathBuf::from("."));
+    let base = if cfg!(windows) {
+        env("LOCALAPPDATA").unwrap_or_else(|| home.join("AppData").join("Local"))
+    } else if cfg!(target_os = "macos") {
+        // ~/Library/Application Support/CrispTrim
+        home.join("Library").join("Application Support")
+    } else {
+        // Linux et autres : ~/.local/share/CrispTrim
+        env("XDG_DATA_HOME").unwrap_or_else(|| home.join(".local").join("share"))
+    };
     base.join("CrispTrim")
 }
 

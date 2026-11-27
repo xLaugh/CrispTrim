@@ -696,7 +696,9 @@ pub fn run(screenshot: Option<PathBuf>, open: Vec<PathBuf>) -> Result<(), String
             .with_inner_size([1440.0, 900.0])
             .with_min_inner_size([1000.0, 640.0])
             .with_icon(icon)
-            .with_drag_and_drop(true),
+            .with_drag_and_drop(true)
+            // Linux : relie la fenêtre au fichier crisptrim.desktop (icône du menu et du dock)
+            .with_app_id("crisptrim"),
         ..Default::default()
     };
     eframe::run_native("CrispTrim", options, Box::new(move |cc| Ok(Box::new(App::new(cc, screenshot, open)))))
@@ -707,7 +709,9 @@ pub fn run(screenshot: Option<PathBuf>, open: Vec<PathBuf>) -> Result<(), String
 pub fn open_url(url: &str) {
     #[cfg(windows)]
     let _ = crate::engine::media::tool("rundll32").args(["url.dll,FileProtocolHandler", url]).spawn();
-    #[cfg(not(windows))]
+    #[cfg(target_os = "macos")]
+    let _ = std::process::Command::new("open").arg(url).spawn();
+    #[cfg(not(any(windows, target_os = "macos")))]
     let _ = std::process::Command::new("xdg-open").arg(url).spawn();
 }
 
@@ -715,7 +719,9 @@ pub fn open_url(url: &str) {
 pub fn reveal(path: &str) {
     #[cfg(windows)]
     let _ = std::process::Command::new("explorer").arg(format!("/select,{path}")).spawn();
-    #[cfg(not(windows))]
+    #[cfg(target_os = "macos")]
+    let _ = std::process::Command::new("open").arg("-R").arg(path).spawn();
+    #[cfg(not(any(windows, target_os = "macos")))]
     let _ = std::process::Command::new("xdg-open").arg(std::path::Path::new(path).parent().unwrap_or(std::path::Path::new("."))).spawn();
 }
 

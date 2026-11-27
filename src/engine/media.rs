@@ -13,7 +13,7 @@ pub const MEDIA_EXT: [&str; 12] = ["mp4", "mov", "mkv", "mxf", "avi", "webm", "m
 /// Comme le lanceur (`tool_env` met `<dossier CrispTrim>\bin` en tête du PATH), le FFmpeg installé
 /// par CrispTrim passe avant celui du système.
 pub fn tool(name: &str) -> Command {
-    let bundled = crate::data_dir().join("bin").join(format!("{name}.exe"));
+    let bundled = crate::data_dir().join("bin").join(if cfg!(windows) { format!("{name}.exe") } else { name.to_string() });
     let program = if matches!(name, "ffmpeg" | "ffprobe") && bundled.is_file() { bundled } else { find_program(name) };
     #[allow(unused_mut)]
     let mut c = Command::new(program);
@@ -34,9 +34,13 @@ fn find_program(name: &str) -> PathBuf {
         return p.clone();
     }
     let exe = if cfg!(windows) && Path::new(name).extension().is_none() { format!("{name}.exe") } else { name.to_string() };
-    let found = std::env::var_os("PATH")
+    let mut dirs: Vec<PathBuf> = std::env::var_os("PATH").map(|p| std::env::split_paths(&p).collect()).unwrap_or_default();
+    // Une appli lancée depuis le Finder ou un menu n'a pas le PATH du terminal (Homebrew, Snap…).
+    if !cfg!(windows) {
+        dirs.extend(["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/snap/bin", "/opt/local/bin"].map(PathBuf::from));
+    }
+    let found = dirs
         .into_iter()
-        .flat_map(|p| std::env::split_paths(&p).collect::<Vec<_>>())
         .map(|dir| dir.join(&exe))
         .find(|p| p.symlink_metadata().is_ok())
         .map(|p| real_path(&p))
@@ -87,11 +91,22 @@ pub fn is_media(p: &Path) -> bool {
     p.extension().map(|e| MEDIA_EXT.contains(&e.to_string_lossy().to_lowercase().as_str())).unwrap_or(false)
 }
 
+/// Comment installer ffmpeg sur ce système.
+pub fn ffmpeg_hint() -> &'static str {
+    if cfg!(windows) {
+        "Installe ffmpeg : winget install Gyan.FFmpeg (ou https://ffmpeg.org/download.html)"
+    } else if cfg!(target_os = "macos") {
+        "Installe ffmpeg : brew install ffmpeg (ou https://ffmpeg.org/download.html)"
+    } else {
+        "Installe ffmpeg avec le gestionnaire de paquets (sudo apt install ffmpeg, sudo dnf install ffmpeg, sudo pacman -S ffmpeg…)"
+    }
+}
+
 pub fn require_ffmpeg() -> Result<(), String> {
     for t in ["ffmpeg", "ffprobe"] {
         let ok = tool(t).arg("-version").stdout(Stdio::null()).stderr(Stdio::null()).status().map(|s| s.success()).unwrap_or(false);
         if !ok {
-            return Err(format!("{t} est introuvable dans le PATH. Installe ffmpeg : https://ffmpeg.org/download.html"));
+            return Err(format!("{t} est introuvable. {}", ffmpeg_hint()));
         }
     }
     Ok(())
@@ -107,7 +122,7 @@ pub fn probe(path: &Path) -> Result<MediaInfo, String> {
         .args(["-v", "error", "-print_format", "json", "-show_format", "-show_streams"])
         .arg(&path)
         .output()
-        .map_err(|e| format!("ffprobe : {e}"))?;
+        .map_err(|e| if e.kind() == std::io::ErrorKind::NotFound { format!("ffprobe est introuvable. {}", ffmpeg_hint()) } else { format!("ffprobe : {e}") })?;
     if !out.status.success() {
         return Err(format!("ffprobe n'a pas pu lire le fichier : {}", String::from_utf8_lossy(&out.stderr).trim()));
     }

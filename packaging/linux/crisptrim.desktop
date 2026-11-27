@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=CrispTrim
+GenericName=Coupe des silences et hésitations
+Comment=Coupe automatiquement les silences, les « euh » et les reprises de tes rushes
+Exec=crisptrim
+Icon=crisptrim
+Terminal=false
+Categories=AudioVideo;Video;AudioVideoEditing;
+StartupWMClass=crisptrim

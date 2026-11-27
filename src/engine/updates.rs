@@ -145,31 +145,73 @@ pub fn install_update(tag: &str, progress: &mut dyn FnMut(u64, u64)) -> Result<(
         return Err(format!("version inconnue : {tag}"));
     }
     let base = format!("{REPO_URL}/releases/download/{tag}");
-    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
-    let mut cmd;
-    if is_installed() {
-        let setup = std::env::temp_dir().join(format!("CrispTrim-Setup-{tag}.exe"));
-        download(&format!("{base}/CrispTrim-Setup.exe"), &setup, progress)?;
-        cmd = std::process::Command::new(&setup);
-        cmd.args(["/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/CLOSEAPPLICATIONS"]);
-    } else {
-        // portable : nouvelle version à côté, échange des fichiers (un .exe lancé peut être renommé)
-        let dir = exe.parent().ok_or("dossier du programme introuvable")?;
-        let new = dir.join("CrispTrim.new.exe");
-        download(&format!("{base}/CrispTrim.exe"), &new, progress)?;
-        let old = dir.join("CrispTrim.old.exe");
-        let _ = std::fs::remove_file(&old);
-        std::fs::rename(&exe, &old).map_err(|e| format!("remplacement impossible : {e}"))?;
-        if let Err(e) = std::fs::rename(&new, &exe) {
-            let _ = std::fs::rename(&old, &exe);
-            return Err(format!("remplacement impossible : {e}"));
-        }
-        cmd = std::process::Command::new(&exe);
-    }
+    let mut cmd = if cfg!(windows) { windows_update(&base, tag, progress)? } else { unix_update(&base, progress)? };
     use std::process::Stdio;
     cmd.stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
     cmd.spawn().map_err(|e| e.to_string())?;
     Ok(())
+}
+
+fn windows_update(base: &str, tag: &str, progress: &mut dyn FnMut(u64, u64)) -> Result<std::process::Command, String> {
+    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+    if is_installed() {
+        let setup = std::env::temp_dir().join(format!("CrispTrim-Setup-{tag}.exe"));
+        download(&format!("{base}/CrispTrim-Setup.exe"), &setup, progress)?;
+        let mut cmd = std::process::Command::new(&setup);
+        cmd.args(["/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/CLOSEAPPLICATIONS"]);
+        return Ok(cmd);
+    }
+    // portable : nouvelle version à côté, échange des fichiers (un .exe lancé peut être renommé)
+    let dir = exe.parent().ok_or("dossier du programme introuvable")?;
+    let new = dir.join("CrispTrim.new.exe");
+    download(&format!("{base}/CrispTrim.exe"), &new, progress)?;
+    let old = dir.join("CrispTrim.old.exe");
+    let _ = std::fs::remove_file(&old);
+    std::fs::rename(&exe, &old).map_err(|e| format!("remplacement impossible : {e}"))?;
+    if let Err(e) = std::fs::rename(&new, &exe) {
+        let _ = std::fs::rename(&old, &exe);
+        return Err(format!("remplacement impossible : {e}"));
+    }
+    Ok(std::process::Command::new(&exe))
+}
+
+/// Fichier à remplacer et nom du fichier de la release, sur Linux et macOS :
+/// l'AppImage lancée, sinon le programme lui-même (dans CrispTrim.app sur macOS).
+pub fn unix_target() -> Result<(std::path::PathBuf, String), String> {
+    let arch = std::env::consts::ARCH;
+    if cfg!(target_os = "macos") {
+        let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+        return Ok((exe, "crisptrim-macos-universal".into()));
+    }
+    if let Some(img) = std::env::var_os("APPIMAGE").filter(|v| !v.is_empty()) {
+        return Ok((img.into(), format!("CrispTrim-{arch}.AppImage")));
+    }
+    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+    if exe.starts_with("/usr") {
+        return Err("CrispTrim a été installé avec un paquet (.deb) : télécharge le nouveau paquet sur la page de la release.".into());
+    }
+    Ok((exe, format!("CrispTrim-linux-{arch}")))
+}
+
+fn unix_update(base: &str, progress: &mut dyn FnMut(u64, u64)) -> Result<std::process::Command, String> {
+    let (target, asset) = unix_target()?;
+    let dir = target.parent().ok_or("dossier du programme introuvable")?;
+    let new = dir.join(".crisptrim-update");
+    download(&format!("{base}/{asset}"), &new, progress).map_err(|e| {
+        let _ = std::fs::remove_file(&new);
+        e
+    })?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&new, std::fs::Permissions::from_mode(0o755)).map_err(|e| e.to_string())?;
+    }
+    // Sur Linux et macOS, remplacer un programme lancé est permis : il garde l'ancien fichier en mémoire.
+    std::fs::rename(&new, &target).map_err(|e| {
+        let _ = std::fs::remove_file(&new);
+        format!("remplacement impossible : {e}")
+    })?;
+    Ok(std::process::Command::new(&target))
 }
 
 /// Au démarrage : efface l'ancienne version laissée par une mise à jour portable.

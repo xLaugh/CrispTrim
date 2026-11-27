@@ -64,3 +64,110 @@ jobs:
     uses: ./.github/workflows/gpu-module.yml
     permissions:
       contents: write
+
+  # Linux : AppImage (toutes les distributions), paquet .deb (Debian, Ubuntu, Mint…) et programme seul.
+  # Construit sur Ubuntu 22.04 : fonctionne avec glibc 2.35 ou plus récent.
+  linux:
+    needs: release
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Bibliothèques (son, fenêtres, sélecteur de fichiers)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libasound2-dev libgtk-3-dev libxkbcommon-dev libwayland-dev libx11-dev libxcursor-dev libxrandr-dev libxi-dev libgl1-mesa-dev
+      - name: Tests
+        run: cargo test --locked
+      - name: Construire
+        run: cargo build --release --locked
+      - name: Paquets
+        run: |
+          set -e
+          version=$(grep -m1 '^version' Cargo.toml | sed -E 's/version = "(.*)"/\1/')
+          mkdir -p dist
+          cp target/release/crisptrim dist/CrispTrim-linux-x86_64
+          chmod 755 dist/CrispTrim-linux-x86_64
+
+          # AppImage : le programme seul, avec les bibliothèques du système (GTK 3, ALSA, OpenGL).
+          app=AppDir
+          mkdir -p $app/usr/bin $app/usr/share/applications $app/usr/share/icons/hicolor/256x256/apps
+          cp target/release/crisptrim $app/usr/bin/
+          cp packaging/linux/crisptrim.desktop $app/ && cp packaging/linux/crisptrim.desktop $app/usr/share/applications/
+          cp assets/crisptrim.png $app/crisptrim.png && cp assets/crisptrim.png $app/usr/share/icons/hicolor/256x256/apps/
+          printf '#!/bin/sh\nHERE="$(dirname "$(readlink -f "$0")")"\nexec "$HERE/usr/bin/crisptrim" "$@"\n' > $app/AppRun
+          chmod 755 $app/AppRun
+          curl -fsSL -o appimagetool https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod 755 appimagetool
+          ARCH=x86_64 APPIMAGE_EXTRACT_AND_RUN=1 ./appimagetool --no-appstream $app dist/CrispTrim-x86_64.AppImage
+
+          # Paquet .deb
+          deb=deb/crisptrim_${version}_amd64
+          mkdir -p $deb/DEBIAN $deb/usr/bin $deb/usr/share/applications $deb/usr/share/icons/hicolor/256x256/apps
+          cp target/release/crisptrim $deb/usr/bin/
+          cp packaging/linux/crisptrim.desktop $deb/usr/share/applications/
+          cp assets/crisptrim.png $deb/usr/share/icons/hicolor/256x256/apps/
+          cat > $deb/DEBIAN/control <<EOF
+          Package: crisptrim
+          Version: ${version}
+          Section: video
+          Priority: optional
+          Architecture: amd64
+          Maintainer: xLaugh <70723697+xLaugh@users.noreply.github.com>
+          Depends: libc6 (>= 2.35), libgtk-3-0, libasound2 | libasound2t64, libgl1, libxkbcommon0, ffmpeg
+          Homepage: https://github.com/xLaugh/CrispTrim
+          Description: Coupe les silences et les hésitations de tes rushes
+           CrispTrim coupe automatiquement les silences, les « euh » et les reprises,
+           puis exporte une timeline pour DaVinci Resolve, Premiere Pro ou Vegas Pro.
+          EOF
+          dpkg-deb --build --root-owner-group $deb dist/crisptrim_${version}_amd64.deb
+          ls -la dist
+      - name: Joindre à la release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$GITHUB_REF_NAME" dist/* --clobber
+
+  # macOS : CrispTrim.app universelle (Apple Silicon et Intel) dans un .dmg, et le programme seul
+  # (utilisé par la mise à jour en un clic). Pas de signature Apple : premier lancement par clic droit > Ouvrir.
+  macos:
+    needs: release
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+      - name: Tests
+        run: cargo test --locked
+      - name: Construire (Apple Silicon et Intel)
+        run: |
+          cargo build --release --locked --target aarch64-apple-darwin
+          cargo build --release --locked --target x86_64-apple-darwin
+      - name: CrispTrim.app et .dmg
+        run: |
+          set -e
+          version=$(grep -m1 '^version' Cargo.toml | sed -E 's/version = "(.*)"/\1/')
+          mkdir -p dist
+          lipo -create -output dist/crisptrim-macos-universal \
+            target/aarch64-apple-darwin/release/crisptrim target/x86_64-apple-darwin/release/crisptrim
+          chmod 755 dist/crisptrim-macos-universal
+          codesign --force -s - dist/crisptrim-macos-universal
+
+          app=dmg/CrispTrim.app
+          mkdir -p $app/Contents/MacOS $app/Contents/Resources
+          cp dist/crisptrim-macos-universal $app/Contents/MacOS/crisptrim
+          sed "s/@VERSION@/$version/g" packaging/macos/Info.plist > $app/Contents/Info.plist
+          set=crisptrim.iconset
+          mkdir -p $set
+          for s in 16 32 64 128 256; do sips -z $s $s assets/crisptrim.png --out $set/icon_${s}x${s}.png >/dev/null; done
+          for s in 16 32 64 128; do cp $set/icon_$((s*2))x$((s*2)).png $set/icon_${s}x${s}@2x.png; done
+          rm $set/icon_64x64.png
+          iconutil -c icns $set -o $app/Contents/Resources/crisptrim.icns
+          codesign --force --deep -s - $app
+          ln -s /Applications dmg/Applications
+          hdiutil create -volname CrispTrim -srcfolder dmg -ov -format UDZO dist/CrispTrim-macOS.dmg
+          ls -la dist
+      - name: Joindre à la release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$GITHUB_REF_NAME" dist/* --clobber

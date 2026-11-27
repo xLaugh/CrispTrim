@@ -274,7 +274,26 @@ pub fn icon_button(ui: &mut Ui, size: Vec2, icon: &str, icon_size: f32, primary:
 
 /// Interrupteur (pilule 32×18) suivi d'un libellé ; renvoie vrai si la valeur a changé.
 pub fn switch(ui: &mut Ui, on: &mut bool, label: &str, label_color: Color32, f: FontId, wrap_width: f32) -> bool {
-    let galley = ui.painter().layout(label.to_string(), f, label_color, wrap_width - 42.0);
+    switch_badge(ui, on, label, None, label_color, f, wrap_width)
+}
+
+/// Interrupteur avec un petit badge après le libellé (« BETA »).
+pub fn switch_badge(ui: &mut Ui, on: &mut bool, label: &str, badge: Option<&str>, label_color: Color32, f: FontId, wrap_width: f32) -> bool {
+    use egui::text::{LayoutJob, TextFormat};
+    let mut job = LayoutJob::default();
+    job.append(label, 0.0, TextFormat { font_id: f.clone(), color: label_color, ..Default::default() });
+    if let Some(b) = badge {
+        let fmt = TextFormat {
+            font_id: FontId::proportional(f.size * 0.72),
+            color: ACCENT2,
+            background: ACCENT.gamma_multiply(0.22),
+            valign: egui::Align::Center,
+            ..Default::default()
+        };
+        job.append(&format!("\u{2009}{b}\u{2009}"), 8.0, fmt);
+    }
+    job.wrap.max_width = wrap_width - 42.0;
+    let galley = ui.painter().layout_job(job);
     let h = galley.size().y.max(18.0);
     let (rect, resp) = ui.allocate_exact_size(Vec2::new(wrap_width.min(42.0 + galley.size().x), h), Sense::click());
     let p = ui.painter();

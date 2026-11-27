@@ -148,7 +148,7 @@ fn settings_tab(app: &mut App, ui: &mut Ui) {
         ui.add_space(12.0);
         changed |= theme::switch(ui, &mut app.edit.cut_noises, "Couper les bruits de bouche", TEXT, font(13.5), w);
         ui.add_space(12.0);
-        changed |= theme::switch(ui, &mut app.edit.cut_retakes, "Couper les reprises (phrase ratée puis recommencée)", TEXT, font(13.5), w);
+        changed |= theme::switch_badge(ui, &mut app.edit.cut_retakes, "Couper les reprises (phrase ratée puis recommencée)", Some("BETA"), TEXT, font(13.5), w);
         ui.add_space(12.0);
         ui.horizontal(|ui| {
             use super::jobs::BreathMode;
@@ -853,7 +853,11 @@ fn update_modal(app: &mut App, ctx: &egui::Context) {
             None if crate::engine::updates::is_installed() => {
                 "CrispTrim télécharge la nouvelle version, se ferme et se relance tout seul. Les réglages, les modèles et le cache sont gardés.".to_string()
             }
-            None => "La nouvelle version remplace ce fichier CrispTrim.exe, puis se relance. Les réglages, les modèles et le cache sont gardés.".to_string(),
+            None if cfg!(windows) => "La nouvelle version remplace ce fichier CrispTrim.exe, puis se relance. Les réglages, les modèles et le cache sont gardés.".to_string(),
+            None => match crate::engine::updates::unix_target() {
+                Ok(_) => "La nouvelle version remplace celle-ci, puis se relance. Les réglages, les modèles et le cache sont gardés.".to_string(),
+                Err(e) => e,
+            },
         };
         let failed = matches!(&dl, Some((_, _, Some(_), _)));
         ui.add(egui::Label::new(RichText::new(how).size(12.0).color(if failed { FILLER } else { MUTED })).wrap());

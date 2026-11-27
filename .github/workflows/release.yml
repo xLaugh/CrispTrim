@@ -131,7 +131,7 @@ jobs:
   # (utilisé par la mise à jour en un clic). Pas de signature Apple : premier lancement par clic droit > Ouvrir.
   macos:
     needs: release
-    runs-on: macos-14
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
